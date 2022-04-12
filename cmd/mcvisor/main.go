@@ -23,30 +23,31 @@ func main() {
 
 	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 
-	sup := suture.NewSimple("mcvisor")
+	rootSupervisor := suture.NewSimple("mcvisor")
 
-	eventLogger := event.HandlerFunc(func(ev event.Event) {
+	dispatcher := event.NewDispatcher()
+	rootSupervisor.Add(dispatcher)
+
+	dispatcher.Add(event.HandlerFunc(func(ev event.Event) {
 		log.Printf("Event: %s", ev)
-	})
+	}))
 
 	var pingerToken suture.ServiceToken
-	pinger := minecraft.MakePinger(conf, eventLogger)
+	pinger := minecraft.MakePinger(conf, dispatcher)
 
-	pingerEventHandler := event.HandlerFunc(func(ev event.Event) {
+	dispatcher.Add(event.HandlerFunc(func(ev event.Event) {
 		switch ev.(type) {
 		case minecraft.ServerStartedEvent:
-			pingerToken = sup.Add(pinger)
+			pingerToken = rootSupervisor.Add(pinger)
 		case minecraft.ServerStoppedEvent:
-			sup.Remove(pingerToken)
+			rootSupervisor.Remove(pingerToken)
 		}
-	})
+	}))
 
-	eventHandler := event.And(eventLogger, pingerEventHandler)
+	server := minecraft.MakeServer(conf, dispatcher)
+	rootSupervisor.Add(server)
 
-	server := minecraft.MakeServer(conf, eventHandler)
-	sup.Add(server)
-
-	err = sup.Serve(ctx)
+	err = rootSupervisor.Serve(ctx)
 	if (err != nil && err != context.Canceled) {
 		log.Fatalf("exit reason: %s", err)
 	}

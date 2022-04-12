@@ -7,6 +7,11 @@ type (
 
 	Handler interface {
 		HandleEvent(Event)
-		And(Handler) Handler
 	}
+
+	HandlerFunc func(Event)
 )
+
+func (f HandlerFunc) HandleEvent(ev Event) {
+	f(ev)
+}
