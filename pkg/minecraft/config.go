@@ -6,28 +6,41 @@ import (
 )
 
 type Config struct {
-	WorkingDir string
-	JavaHome string
-	ServerJarPath string
-	Parameters []string
-	PIDPath string
+	WorkingDir string `json:"working_dir,omitempty"`
+	JavaHome string `json:"java_home,omitempty"`
+	JavaParameters []string `json:"java_parameters,omitempty"`
+	ServerJarPath string `json:"server_jar,omitempty"`
+	Parameters []string `json:"parameters,omitempty"`
+	PidFile string `json:"pid_file,omitempty"`
 }
 
-func (c *Config) ResolvePath(baseDir string) {
+func (c *Config) ConfigureDefaults() {
 	if c.JavaHome == "" {
 		c.JavaHome = os.Getenv("JAVA_HOME")
+	}
+	if c.JavaParameters == nil {
+		c.JavaParameters = []string{
+			"-XX:+UnlockExperimentalVMOptions",
+			"-XX:+UseG1GC",
+			"-XX:G1NewSizePercent=20",
+			"-XX:G1ReservePercent=20",
+			"-XX:MaxGCPauseMillis=50",
+			"-XX:G1HeapRegionSize=32M",
+		}
 	}
 	if c.ServerJarPath == "" {
 		c.ServerJarPath = "server.jar"
 	}
-	if c.PIDPath == "" {
-		c.PIDPath = "server.pid"
+	if c.PidFile == "" {
+		c.PidFile = "server.pid"
 	}
+}
 
+func (c *Config) SetBaseDir(baseDir string) {
 	c.WorkingDir = resolvePath(baseDir, c.WorkingDir)
-	c.JavaHome = resolvePath(baseDir, c.JavaHome)
-	c.ServerJarPath = resolvePath(baseDir, c.ServerJarPath)
-	c.PIDPath = resolvePath(baseDir, c.PIDPath)
+	c.JavaHome = resolvePath(c.WorkingDir, c.JavaHome)
+	c.ServerJarPath = resolvePath(c.WorkingDir, c.ServerJarPath)
+	c.PidFile = resolvePath(c.WorkingDir, c.PidFile)
 }
 
 func (c Config) Command() string {
@@ -35,7 +48,21 @@ func (c Config) Command() string {
 }
 
 func (c Config) CmdLine() []string {
-	return append([]string{c.Command(), "-jar", c.ServerJarPath}, c.Parameters...)
+	return append(
+		append(
+			append(
+				[]string{c.Command()},
+				 c.JavaParameters...
+			),
+	 		"-jar",
+			c.ServerJarPath,
+		),
+		c.Parameters...
+	)
+}
+
+func (c Config) ServerPropertiesPath() string {
+	return filepath.Join(c.WorkingDir, "server.properties")
 }
 
 func (c Config) Env() []string {
