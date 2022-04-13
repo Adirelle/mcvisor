@@ -6,10 +6,10 @@ import (
 )
 
 type Config struct {
-	WorkingDir string `json:"working_dir,omitempty"`
-	JavaHome string `json:"java_home,omitempty"`
+	WorkingDir string `json:"working_dir,omitempty" validate:"dir"`
+	JavaHome string `json:"java_home,omitempty" validate:"dir"`
 	JavaParameters []string `json:"java_parameters,omitempty"`
-	ServerJarPath string `json:"server_jar,omitempty"`
+	ServerJarPath string `json:"server_jar,omitempty" validate:"file"`
 	Parameters []string `json:"parameters,omitempty"`
 	PidFile string `json:"pid_file,omitempty"`
 }

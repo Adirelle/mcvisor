@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 
 type (
 	Config struct {
-		Minecraft *minecraft.Config `json:"minecraft"`
+		Minecraft *minecraft.Config `json:"minecraft" validate:"required"`
 	}
 )
 
@@ -36,13 +37,13 @@ func (c *Config) Load() error {
 	}
 
 	c.ConfigureDefaults()
-
-	err = c.WriteTo(path)
-	if err != nil {
-		log.Printf("could not write configuration to %s: %s", path, err)
-	}
-
 	c.SetBaseDir(filepath.Dir(path))
+
+	validate := validator.New()
+	err = validate.Struct(c)
+	if err != nil {
+		return fmt.Errorf("invalid configuration in %s: %w", path, err)
+	}
 
 	return nil
 }
