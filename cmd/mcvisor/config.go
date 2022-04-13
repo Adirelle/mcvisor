@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/go-playground/validator/v10"
 )
@@ -18,11 +19,15 @@ const (
 type (
 	Config struct {
 		Minecraft *minecraft.Config `json:"minecraft" validate:"required"`
+		Discord *discord.Config `json:"discord" validate:"required"`
 	}
 )
 
 func NewConfig() *Config {
-	return &Config{Minecraft: &minecraft.Config{}}
+	return &Config{
+		Minecraft: &minecraft.Config{},
+		Discord: &discord.Config{},
+	}
 }
 
 func (c *Config) Load() error {
@@ -50,6 +55,7 @@ func (c *Config) Load() error {
 
 func (c *Config) ConfigureDefaults() {
 	c.Minecraft.ConfigureDefaults()
+	c.Discord.ConfigureDefaults()
 }
 
 func (c *Config) SetBaseDir(baseDir string) {

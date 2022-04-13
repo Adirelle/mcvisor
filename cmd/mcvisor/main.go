@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/event"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/thejerf/suture/v4"
@@ -44,6 +45,10 @@ func main() {
 
 	server := minecraft.MakeServer(*conf.Minecraft, dispatcher)
 	rootSupervisor.Add(server)
+
+	bot := discord.NewBot(*conf.Discord, dispatcher)
+	rootSupervisor.Add(bot)
+	dispatcher.Add(bot)
 
 	err = rootSupervisor.Serve(ctx)
 	if (err != nil && err != context.Canceled) {

@@ -10,7 +10,6 @@ const (
 	DefaultPidfile = "server.pid"
 	DefaultServerProperties = "server.properties"
 	JaveHomeEnvName = "JAVA_HOME"
-	JavaCmd = "bin/java"
 )
 
 type Config struct {
