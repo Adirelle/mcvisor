@@ -11,6 +11,14 @@ import (
 	"github.com/millkhan/mcstatusgo/v2"
 )
 
+const (
+	ServerHost = "localhost"
+	DefaultServerPort = 25565
+	PingPeriod = 30 * time.Second
+	ConnectionTimeout = 5 * time.Second
+	ResponseTimeout = 5 * time.Second
+)
+
 type (
 	Pinger struct {
 		propertyPath string
@@ -49,7 +57,7 @@ func (p Pinger) Serve(ctx context.Context) error {
 		return err
 	}
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(PingPeriod)
 	defer ticker.Stop()
 
 	for {
@@ -80,12 +88,12 @@ func (p Pinger) Ping() {
 }
 
 func (p Pinger) sendQuery() (err error) {
-	_, err = mcstatusgo.BasicQuery("localhost", p.queryPort, 5 * time.Second, 5 * time.Second)
+	_, err = mcstatusgo.BasicQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout)
 	return
 }
 
 func (p Pinger) getStatus() (err error) {
-	_, err = mcstatusgo.Status("localhost", p.statusPort, 5 * time.Second, 5 * time.Second)
+	_, err = mcstatusgo.Status(ServerHost, p.statusPort, ConnectionTimeout, ResponseTimeout)
 	return
 }
 
@@ -95,7 +103,7 @@ func (p Pinger) readSettings() error {
 		return fmt.Errorf("could not read %s: %w", p.propertyPath, err)
 	}
 	p.statusEnabled = props.Bool("enable-status", false)
-	p.statusPort = uint16(props.Int("server-port", 25565))
+	p.statusPort = uint16(props.Int("server-port", DefaultServerPort))
 	p.queryEnabled = props.Bool("enable-query", false)
 	p.queryPort = uint16(props.Int("query.port", int64(p.statusPort)))
 	return nil
