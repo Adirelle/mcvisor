@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/event"
@@ -19,8 +20,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-
 	rootSupervisor := suture.NewSimple("mcvisor")
 
 	dispatcher := event.NewDispatcher()
@@ -30,20 +29,9 @@ func main() {
 		log.Printf("Event: %s", ev)
 	}))
 
-	var pingerToken suture.ServiceToken
-	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
-
-	dispatcher.Add(event.HandlerFunc(func(ev event.Event) {
-		switch ev.(type) {
-		case minecraft.ServerStartedEvent:
-			pingerToken = rootSupervisor.Add(pinger)
-		case minecraft.ServerStoppedEvent:
-			rootSupervisor.Remove(pingerToken)
-		}
-	}))
-
-	server := minecraft.MakeServer(*conf.Minecraft, dispatcher)
-	rootSupervisor.Add(server)
+	pinger := minecraft.MakePinger(*conf.Minecraft, dispatcher)
+	rootSupervisor.Add(pinger)
+	dispatcher.Add(pinger)
 
 	status := minecraft.NewStatusService(dispatcher)
 	rootSupervisor.Add(status)
@@ -53,7 +41,12 @@ func main() {
 	rootSupervisor.Add(bot)
 	dispatcher.Add(bot)
 
+	server := minecraft.MakeServer(*conf.Minecraft, dispatcher)
+	rootSupervisor.Add(server)
+
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
 	err = rootSupervisor.Serve(ctx)
+
 	if err != nil && err != context.Canceled {
 		log.Fatalf("exit reason: %s", err)
 	}

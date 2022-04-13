@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/event"
 	properties "github.com/dmotylev/goproperties"
 	"github.com/millkhan/mcstatusgo/v2"
@@ -41,10 +44,18 @@ type (
 	}
 )
 
+func init() {
+	discord.RegisterCommand(discord.CommandDef{
+		Name:        "online",
+		Description: "list online players",
+		Permission:  "query",
+	})
+}
+
 var ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled")
 
-func NewPinger(conf Config, handler event.Handler) *Pinger {
-	return &Pinger{
+func MakePinger(conf Config, handler event.Handler) Pinger {
+	return Pinger{
 		propertyPath:   conf.ServerPropertiesPath(),
 		Handler:        handler,
 		pingerSettings: new(pingerSettings),
@@ -60,11 +71,11 @@ func (p Pinger) Serve(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
+		p.Ping()
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			p.Ping()
 		}
 	}
 }
@@ -80,9 +91,9 @@ func (p Pinger) Ping() {
 	}
 	now := time.Now()
 	if err == nil {
-		p.HandleEvent(PingSucceededEvent(now))
+		p.Handler.HandleEvent(PingSucceededEvent(now))
 	} else {
-		p.HandleEvent(PingFailedEvent{now, err})
+		p.Handler.HandleEvent(PingFailedEvent{now, err})
 	}
 }
 
@@ -94,6 +105,22 @@ func (p Pinger) sendQuery() (err error) {
 func (p Pinger) getStatus() (err error) {
 	_, err = mcstatusgo.Status(ServerHost, p.statusPort, ConnectionTimeout, ResponseTimeout)
 	return
+}
+
+func (p Pinger) HandleEvent(ev event.Event) {
+	if c, isCmd := ev.(discord.ReceivedCommandEvent); isCmd && c.Name == "online" {
+		if !p.queryEnabled {
+			c.Reply("query is disabled on the server")
+			return
+		}
+		response, err := mcstatusgo.FullQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout)
+		log.Printf("online result: %#v / %s", response, err)
+		if err == nil {
+			c.Reply(fmt.Sprintf("```\nOnline players:\n%s\n```", strings.Join(response.Players.PlayerList, "\n")))
+		} else {
+			c.Reply(fmt.Sprintf("server did not reply: %s", err))
+		}
+	}
 }
 
 func (p Pinger) readSettings() error {

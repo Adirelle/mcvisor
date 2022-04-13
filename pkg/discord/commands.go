@@ -99,17 +99,17 @@ func (b *Bot) handleCommand(s *discordgo.Session, i *discordgo.InteractionCreate
 		log.Printf("received unknown command: %s", data.Name)
 		return
 	}
+	s.InteractionRespond(
+		i.Interaction,
+		&discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		},
+	)
+
 	reply := func(message string) {
-		s.InteractionRespond(
-			i.Interaction,
-			&discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: message,
-				},
-			},
-		)
+		s.InteractionResponseEdit(b.AppID(), i.Interaction, &discordgo.WebhookEdit{Content: message})
 	}
+
 	event := ReceivedCommandEvent{Time: time.Now(), CommandDef: def, Reply: reply}
 	b.Handler.HandleEvent(event)
 }
