@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Adirelle/mcvisor/pkg/event"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -21,6 +22,10 @@ type (
 		Reply func(string)
 	}
 )
+
+func (e ReceivedCommandEvent) String() string {
+	return fmt.Sprintf("command %s received at %s", e.Name, event.FormatTime(e.Time))
+}
 
 var commands = make(map[string]CommandDef)
 

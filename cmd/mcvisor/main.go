@@ -13,7 +13,6 @@ import (
 )
 
 func main() {
-
 	conf := NewConfig()
 	err := conf.Load()
 	if err != nil {
@@ -46,12 +45,16 @@ func main() {
 	server := minecraft.MakeServer(*conf.Minecraft, dispatcher)
 	rootSupervisor.Add(server)
 
+	status := minecraft.NewStatusService(dispatcher)
+	rootSupervisor.Add(status)
+	dispatcher.Add(status)
+
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	rootSupervisor.Add(bot)
 	dispatcher.Add(bot)
 
 	err = rootSupervisor.Serve(ctx)
-	if (err != nil && err != context.Canceled) {
+	if err != nil && err != context.Canceled {
 		log.Fatalf("exit reason: %s", err)
 	}
 }

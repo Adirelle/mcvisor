@@ -4,8 +4,8 @@ import "github.com/bwmarrin/discordgo"
 
 type (
 	Principal struct {
-		UserID *Secret `json:"userId,omitempty" validate:"omitempty,numeric"`
-		RoleID *Secret `json:"roleId,omitempty" validate:"omitempty,numeric"`
+		UserID *Secret `json:"userId,omitempty" validate:"omitempty,required_without=RoleID,numeric"`
+		RoleID *Secret `json:"roleId,omitempty" validate:"omitempty,required_without=UserID,numeric"`
 	}
 	PrincipalList []Principal
 )
