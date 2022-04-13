@@ -70,7 +70,3 @@ func (b *Bot) disconnect() {
 	b.Session = nil
 	log.Println("disconnected from discord")
 }
-
-func (b *Bot) HandleEvent(ev event.Event) {
-	// log.Printf("bot received event: %s", ev)
-}

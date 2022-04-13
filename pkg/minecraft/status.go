@@ -106,3 +106,16 @@ func (s ServerStatus) String() string {
 func (e ServerStatusChangedEvent) String() string {
 	return fmt.Sprintf("server status changed to %s at %s", e.Status, event.FormatTime(e.Time))
 }
+
+func (e ServerStatusChangedEvent) Category() string {
+	switch e.Status {
+	case ServerStarting, ServerReady, ServerUnreachable, ServerStopped:
+		return "status"
+	default:
+		return ""
+	}
+}
+
+func (e ServerStatusChangedEvent) Message() string {
+	return fmt.Sprintf("Server %s", e.Status)
+}

@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	ServerHost = "localhost"
+	ServerHost        = "localhost"
 	DefaultServerPort = 25565
-	PingPeriod = 30 * time.Second
+	PingPeriod        = 10 * time.Second
 	ConnectionTimeout = 5 * time.Second
-	ResponseTimeout = 5 * time.Second
+	ResponseTimeout   = 5 * time.Second
 )
 
 type (
@@ -28,9 +28,9 @@ type (
 
 	pingerSettings struct {
 		statusEnabled bool
-		statusPort uint16
-		queryEnabled bool
-		queryPort uint16
+		statusPort    uint16
+		queryEnabled  bool
+		queryPort     uint16
 	}
 
 	PingSucceededEvent time.Time
@@ -43,16 +43,15 @@ type (
 
 var ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled")
 
-func MakePinger(conf Config, handler event.Handler) Pinger {
-	return Pinger{
-		propertyPath: conf.ServerPropertiesPath(),
-		Handler: handler,
+func NewPinger(conf Config, handler event.Handler) *Pinger {
+	return &Pinger{
+		propertyPath:   conf.ServerPropertiesPath(),
+		Handler:        handler,
 		pingerSettings: new(pingerSettings),
 	}
 }
 
 func (p Pinger) Serve(ctx context.Context) error {
-
 	if err := p.readSettings(); err != nil {
 		return err
 	}
@@ -62,7 +61,7 @@ func (p Pinger) Serve(ctx context.Context) error {
 
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
 			p.Ping()
@@ -72,7 +71,6 @@ func (p Pinger) Serve(ctx context.Context) error {
 
 func (p Pinger) Ping() {
 	var err error
-	now := time.Now()
 	if p.queryEnabled {
 		err = p.sendQuery()
 	} else if p.statusEnabled {
@@ -80,6 +78,7 @@ func (p Pinger) Ping() {
 	} else {
 		err = ErrBothQueryAndStatusDisabled
 	}
+	now := time.Now()
 	if err == nil {
 		p.HandleEvent(PingSucceededEvent(now))
 	} else {

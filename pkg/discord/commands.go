@@ -113,13 +113,3 @@ func (b *Bot) handleCommand(s *discordgo.Session, i *discordgo.InteractionCreate
 	event := ReceivedCommandEvent{Time: time.Now(), CommandDef: def, Reply: reply}
 	b.Handler.HandleEvent(event)
 }
-
-func init() {
-	RegisterCommand(
-		CommandDef{
-			Name:        "online",
-			Description: "list online player",
-			Permission:  "query",
-		},
-	)
-}

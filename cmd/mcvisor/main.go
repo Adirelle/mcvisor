@@ -31,7 +31,7 @@ func main() {
 	}))
 
 	var pingerToken suture.ServiceToken
-	pinger := minecraft.MakePinger(*conf.Minecraft, dispatcher)
+	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
 
 	dispatcher.Add(event.HandlerFunc(func(ev event.Event) {
 		switch ev.(type) {
