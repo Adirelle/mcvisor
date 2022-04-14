@@ -56,12 +56,17 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 }
 
 func (b *Bot) HandleEvent(ev event.Event) {
-	if ev.Type() == CommandReceivedType {
-		b.handleUserCommand(ev.(Command))
-		return
-	}
 	if n, ok := ev.(Notification); ok {
 		b.handleNotification(n)
+	}
+	if c, ok := ev.(Command); ok {
+		switch c.Name {
+		case HelpCommand:
+			b.handleHelpCommand(c)
+		case PermCommand:
+			b.handlePermCommand(c)
+		default:
+		}
 	}
 }
 

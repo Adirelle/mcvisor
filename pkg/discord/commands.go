@@ -83,10 +83,7 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}()
 }
 
-func (b *Bot) handleUserCommand(cmd Command) {
-	if cmd.Name != HelpCommand {
-		return
-	}
+func (b *Bot) handleHelpCommand(cmd Command) {
 	lineFmt := fmt.Sprintf("%c%%-%ds - %%s\n", b.CommandPrefix, maxCommandNameLen)
 	io.WriteString(cmd.Reply, "\n```\n")
 	for _, c := range commands {
