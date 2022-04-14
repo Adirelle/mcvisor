@@ -50,8 +50,6 @@ func (b *Bot) registerCommands() error {
 		if def.Permission != "" {
 			if permConfig, ok := b.Config.Permissions[def.Permission]; ok {
 				permissions = permConfig.toCommandPermissions(appID, guildID)
-			} else {
-				return fmt.Errorf("unknown permission for command `%s`: %s", def.Name, def.Permission)
 			}
 		}
 		allowedToAll := permissions == nil
