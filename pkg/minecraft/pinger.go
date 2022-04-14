@@ -36,12 +36,21 @@ type (
 		queryPort     uint16
 	}
 
-	PingSucceededEvent time.Time
+	PingSucceededEvent struct {
+		event.Time
+	}
 
 	PingFailedEvent struct {
-		time.Time
+		event.Time
 		Reason error
 	}
+)
+
+var (
+	PingSucceededType = event.Type("PingSucceeded")
+	PingFailedType    = event.Type("PingFailed")
+
+	ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled")
 )
 
 func init() {
@@ -51,8 +60,6 @@ func init() {
 		Permission:  "query",
 	})
 }
-
-var ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled")
 
 func MakePinger(conf Config, handler event.Handler) Pinger {
 	return Pinger{
@@ -89,11 +96,10 @@ func (p Pinger) Ping() {
 	} else {
 		err = ErrBothQueryAndStatusDisabled
 	}
-	now := time.Now()
 	if err == nil {
-		p.Handler.HandleEvent(PingSucceededEvent(now))
+		p.Handler.HandleEvent(PingSucceededEvent{event.Now()})
 	} else {
-		p.Handler.HandleEvent(PingFailedEvent{now, err})
+		p.Handler.HandleEvent(PingFailedEvent{event.Now(), err})
 	}
 }
 
@@ -135,10 +141,8 @@ func (p Pinger) readSettings() error {
 	return nil
 }
 
-func (e PingSucceededEvent) String() string {
-	return fmt.Sprintf("ping succeeded at %s", event.FormatTime(time.Time(e)))
-}
+func (PingSucceededEvent) Type() event.Type { return PingSucceededType }
+func (PingSucceededEvent) String() string   { return "ping succeeded" }
 
-func (e PingFailedEvent) String() string {
-	return fmt.Sprintf("ping failed at %s: %s", event.FormatTime(e.Time), e.Reason)
-}
+func (PingFailedEvent) Type() event.Type { return PingFailedType }
+func (e PingFailedEvent) String() string { return fmt.Sprintf("ping failed: %s", e.Reason) }

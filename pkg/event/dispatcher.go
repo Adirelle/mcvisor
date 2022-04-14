@@ -2,7 +2,6 @@ package event
 
 import (
 	"context"
-	"time"
 )
 
 type (
@@ -61,8 +60,4 @@ func (d Dispatcher) Add(handler Handler) {
 
 func (d Dispatcher) Remove(handler Handler) {
 	d.ctl <- removeCommand{handler}
-}
-
-func FormatTime(when time.Time) string {
-	return when.Format("2006-01-02 15:04:05")
 }

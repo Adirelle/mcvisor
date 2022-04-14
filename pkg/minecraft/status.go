@@ -19,9 +19,13 @@ type (
 	}
 
 	ServerStatusChangedEvent struct {
-		time.Time
+		event.Time
 		Status ServerStatus
 	}
+)
+
+var (
+	ServerStatusChangedType = event.Type("ServerStatusChanged")
 )
 
 const (
@@ -55,7 +59,7 @@ func (s *StatusService) HandleEvent(ev event.Event) {
 	if newStatus != s.ServerStatus {
 		s.ServerStatus = newStatus
 		s.LastUpdate = time.Now()
-		s.Handler.HandleEvent(ServerStatusChangedEvent{Time: s.LastUpdate, Status: s.ServerStatus})
+		s.Handler.HandleEvent(ServerStatusChangedEvent{event.Time(s.LastUpdate), s.ServerStatus})
 	}
 	if c, ok := ev.(discord.ReceivedCommandEvent); ok && c.CommandDef.Name == "status" {
 		c.Reply(fmt.Sprintf("Server is %s", s.ServerStatus))
@@ -103,8 +107,12 @@ func (s ServerStatus) String() string {
 	}
 }
 
+func (ServerStatusChangedEvent) Type() event.Type {
+	return ServerStatusChangedType
+}
+
 func (e ServerStatusChangedEvent) String() string {
-	return fmt.Sprintf("server status changed to %s at %s", e.Status, event.FormatTime(e.Time))
+	return fmt.Sprintf("status changed to %s ", e.Status)
 }
 
 func (e ServerStatusChangedEvent) Category() string {

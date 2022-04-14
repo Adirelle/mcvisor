@@ -3,7 +3,6 @@ package discord
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/event"
 	"github.com/bwmarrin/discordgo"
@@ -17,14 +16,20 @@ type (
 	}
 
 	ReceivedCommandEvent struct {
-		time.Time
+		event.Time
 		CommandDef
 		Reply func(string)
 	}
 )
 
+var ReceivedCommandType = event.Type("ReceivedCommand")
+
 func (e ReceivedCommandEvent) String() string {
-	return fmt.Sprintf("command %s received at %s", e.Name, event.FormatTime(e.Time))
+	return fmt.Sprintf("command received: %s", e.Name)
+}
+
+func (e ReceivedCommandEvent) Type() event.Type {
+	return ReceivedCommandType
 }
 
 var commands = make(map[string]CommandDef)
@@ -110,6 +115,6 @@ func (b *Bot) handleCommand(s *discordgo.Session, i *discordgo.InteractionCreate
 		s.InteractionResponseEdit(b.AppID(), i.Interaction, &discordgo.WebhookEdit{Content: message})
 	}
 
-	event := ReceivedCommandEvent{Time: time.Now(), CommandDef: def, Reply: reply}
+	event := ReceivedCommandEvent{Time: event.Now(), CommandDef: def, Reply: reply}
 	b.Handler.HandleEvent(event)
 }

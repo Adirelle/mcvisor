@@ -1,9 +1,18 @@
 package event
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type (
-	Event     fmt.Stringer
+	Event interface {
+		fmt.Stringer
+		Type() Type
+		When() time.Time
+	}
+
+	Type string
 
 	Handler interface {
 		HandleEvent(Event)
