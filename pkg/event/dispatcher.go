@@ -6,7 +6,7 @@ import (
 
 type (
 	Dispatcher interface {
-		DispatchEvent(Event)
+		DispatchEvent(Event) <-chan struct{}
 	}
 
 	AsyncDispatcher struct {
@@ -16,9 +16,13 @@ type (
 
 	command interface{}
 
-	addCommand      struct{ Handler }
-	removeCommand   struct{ Handler }
-	dispatchCommand struct{ Event }
+	addCommand    struct{ Handler }
+	removeCommand struct{ Handler }
+
+	dispatchCommand struct {
+		Event
+		done chan struct{}
+	}
 )
 
 func NewAsyncDispatcher() *AsyncDispatcher {
@@ -44,18 +48,22 @@ func (d *AsyncDispatcher) handleCommand(cmd command) {
 		for i, handler := range d.handlers {
 			if handler == c.Handler {
 				d.handlers = append(d.handlers[:i], d.handlers[i+1:]...)
-				return
+				break
 			}
 		}
 	case dispatchCommand:
+		defer close(c.done)
 		for _, handler := range d.handlers {
 			handler.HandleEvent(c.Event)
 		}
+
 	}
 }
 
-func (d AsyncDispatcher) DispatchEvent(event Event) {
-	d.ctl <- dispatchCommand{event}
+func (d AsyncDispatcher) DispatchEvent(event Event) <-chan struct{} {
+	done := make(chan struct{})
+	d.ctl <- dispatchCommand{event, done}
+	return done
 }
 
 func (d AsyncDispatcher) HandleEvent(event Event) {
