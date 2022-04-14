@@ -57,7 +57,7 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 
 func (b *Bot) HandleEvent(ev event.Event) {
 	if ev.Type() == CommandReceivedType {
-		b.handleUserCommand(ev.(CommandReceivedEvent))
+		b.handleUserCommand(ev.(Command))
 		return
 	}
 	if n, ok := ev.(Notification); ok {

@@ -2,7 +2,7 @@ package discord
 
 import (
 	"fmt"
-	"log"
+	"io"
 	"strings"
 
 	"github.com/Adirelle/mcvisor/pkg/event"
@@ -16,12 +16,12 @@ type (
 		Permission  PermissionCategory
 	}
 
-	CommandReceivedEvent struct {
+	Command struct {
+		*CommandDef
 		event.Time
-		Name      string
-		Reply     func(string)
 		Arguments []string
 		PrincipalHolder
+		Reply io.Writer
 	}
 
 	messagePrincipalHolder struct {
@@ -55,50 +55,55 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	parts := strings.Split(m.Message.Content[1:], " ")
 	name := parts[0]
+	response := &strings.Builder{}
+	go func() {
+		defer func() {
+			if response.Len() == 0 {
+				return
+			}
+			s.ChannelMessageSendComplex(
+				m.ChannelID,
+				&discordgo.MessageSend{Content: response.String(), Reference: m.Reference()},
+			)
+		}()
 
-	reply := func(message string) {
-		_, err := s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{Content: message, Reference: m.Reference()})
-		if err != nil {
-			log.Printf("could not reply to %s: %s", m.Author.Username, err)
+		def, found := commands[name]
+		if !found {
+			response.WriteString("**Unknown command**")
+			return
 		}
-	}
 
-	def, found := commands[name]
-	if !found {
-		reply("**Unknown command**")
-		return
-	}
-	principalHolder := messagePrincipalHolder{m.Message}
-	if !b.Permissions.Allow(def.Permission, principalHolder) {
-		reply("**Permission denied**")
-		return
-	}
-	b.DispatchEvent(CommandReceivedEvent{event.Now(), def.Name, reply, parts[1:], principalHolder})
+		principalHolder := messagePrincipalHolder{m.Message}
+		if !b.Permissions.Allow(def.Permission, principalHolder) {
+			response.WriteString("**Permission denied**")
+			return
+		}
+
+		<-b.DispatchEvent(Command{&def, event.Now(), parts[1:], principalHolder, response})
+	}()
 }
 
-func (b *Bot) handleUserCommand(cmd CommandReceivedEvent) {
+func (b *Bot) handleUserCommand(cmd Command) {
 	if cmd.Name != HelpCommand {
 		return
 	}
-	builder := strings.Builder{}
 	lineFmt := fmt.Sprintf("%c%%-%ds - %%s\n", b.CommandPrefix, maxCommandNameLen)
-	builder.WriteString("\n```\n")
+	io.WriteString(cmd.Reply, "\n```\n")
 	for _, c := range commands {
 		if !b.Permissions.Allow(c.Permission, cmd.PrincipalHolder) {
 			continue
 		}
-		fmt.Fprintf(&builder, lineFmt, c.Name, c.Description)
+		fmt.Fprintf(cmd.Reply, lineFmt, c.Name, c.Description)
 	}
-	builder.WriteString("```")
-	cmd.Reply(builder.String())
+	io.WriteString(cmd.Reply, "```")
 }
 
-func (CommandReceivedEvent) Type() event.Type {
+func (Command) Type() event.Type {
 	return CommandReceivedType
 }
 
-func (e CommandReceivedEvent) String() string {
-	return fmt.Sprintf("command received: %s (%v)", e.Name, e.Arguments)
+func (c Command) String() string {
+	return fmt.Sprintf("command received: %s (%v)", c.Name, c.Arguments)
 }
 
 func (m messagePrincipalHolder) HasUser(userID UserID) bool {

@@ -58,8 +58,8 @@ func (s *StatusMonitor) Serve(ctx context.Context) error {
 }
 
 func (s *StatusMonitor) HandleEvent(ev event.Event) {
-	if c, ok := ev.(discord.CommandReceivedEvent); ok && c.Name == StatusCommand {
-		c.Reply(fmt.Sprintf("%s since %s", s.ServerStatus, s.LastUpdate.DiscordRelative()))
+	if c, ok := ev.(discord.Command); ok && c.Name == StatusCommand {
+		fmt.Fprintf(c.Reply, "%s since %s", s.ServerStatus, s.LastUpdate.DiscordRelative())
 		return
 	}
 

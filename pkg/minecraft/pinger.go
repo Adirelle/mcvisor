@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -53,9 +55,13 @@ var (
 	ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled")
 )
 
+const (
+	OnlineCommand string = "online"
+)
+
 func init() {
 	discord.RegisterCommand(discord.CommandDef{
-		Name:        "online",
+		Name:        OnlineCommand,
 		Description: "list online players",
 		Permission:  discord.QueryPermissionCategory,
 	})
@@ -118,18 +124,31 @@ func (p *Pinger) getStatus() (err error) {
 }
 
 func (p *Pinger) HandleEvent(ev event.Event) {
-	if c, isCmd := ev.(discord.CommandReceivedEvent); isCmd && c.Name == "online" {
-		if !p.queryEnabled {
-			c.Reply("query is disabled on the server")
-			return
-		}
-		response, err := mcstatusgo.FullQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout)
-		log.Printf("online result: %#v / %s", response, err)
-		if err == nil {
-			c.Reply(fmt.Sprintf("```\nOnline players:\n%s\n```", strings.Join(response.Players.PlayerList, "\n")))
-		} else {
-			c.Reply(fmt.Sprintf("server did not reply: %s", err))
-		}
+	c, isCmd := ev.(discord.Command)
+	if !isCmd || c.Name != OnlineCommand {
+		return
+	}
+	if !p.queryEnabled {
+		io.WriteString(c.Reply, "query is disabled on the server")
+		return
+	}
+	response, err := mcstatusgo.FullQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout)
+	if err == nil {
+		fmt.Fprintf(
+			c.Reply,
+			"```\nOnline players (%d/%d):\n%s\n```",
+			response.Players.Online,
+			response.Players.Max,
+			strings.Join(response.Players.PlayerList, "\n"),
+		)
+		return
+	}
+
+	log.Printf("could not query server: %s", err)
+	if netErr, isNetError := err.(net.Error); isNetError && netErr.Timeout() {
+		io.WriteString(c.Reply, "could not contact server")
+	} else {
+		io.WriteString(c.Reply, "internal error")
 	}
 }
 
