@@ -8,11 +8,18 @@ import (
 
 type (
 	Notification interface {
-		Category() string
+		Category() NotificationCategory
 		Message() string
 	}
 
+	NotificationCategory string
+
 	NotificationTargets []Secret
+)
+
+var (
+	IgnoredCategory NotificationCategory = ""
+	StatusCategory  NotificationCategory = "status"
 )
 
 func (b *Bot) HandleEvent(ev event.Event) {

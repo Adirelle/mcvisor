@@ -12,7 +12,7 @@ type (
 	CommandDef struct {
 		Name        string
 		Description string
-		Permission  string
+		Permission  Permission
 	}
 
 	ReceivedCommandEvent struct {

@@ -41,7 +41,7 @@ func init() {
 	discord.RegisterCommand(discord.CommandDef{
 		Name:        "status",
 		Description: "check server status",
-		Permission:  "query",
+		Permission:  discord.QueryPermission,
 	})
 }
 
@@ -115,12 +115,12 @@ func (e ServerStatusChangedEvent) String() string {
 	return fmt.Sprintf("status changed to %s ", e.Status)
 }
 
-func (e ServerStatusChangedEvent) Category() string {
+func (e ServerStatusChangedEvent) Category() discord.NotificationCategory {
 	switch e.Status {
 	case ServerStarting, ServerReady, ServerUnreachable, ServerStopped:
-		return "status"
+		return discord.StatusCategory
 	default:
-		return ""
+		return discord.IgnoredCategory
 	}
 }
 

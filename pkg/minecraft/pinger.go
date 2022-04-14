@@ -57,7 +57,7 @@ func init() {
 	discord.RegisterCommand(discord.CommandDef{
 		Name:        "online",
 		Description: "list online players",
-		Permission:  "query",
+		Permission:  discord.QueryPermission,
 	})
 }
 

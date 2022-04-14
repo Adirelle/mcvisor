@@ -8,6 +8,13 @@ type (
 		RoleID *Secret `json:"roleId,omitempty" validate:"omitempty,required_without=UserID,numeric"`
 	}
 	PrincipalList []Principal
+
+	Permission string
+)
+
+var (
+	QueryPermission   Permission = "query"
+	ControlPermission Permission = "control"
 )
 
 func (p Principal) toCommandPermission() *discordgo.ApplicationCommandPermissions {

@@ -4,10 +4,10 @@ type (
 	Secret string
 
 	Config struct {
-		Token         Secret                         `json:"token" validate:"required"`
-		GuildID       Secret                         `json:"serverId" validate:"omitempty,numeric"`
-		Permissions   map[string]PrincipalList       `json:"permissions,omitempty" validate:"omitempty"`
-		Notifications map[string]NotificationTargets `json:"notifications,omitempty" validate:"omitempty"`
+		Token         Secret                                       `json:"token" validate:"required"`
+		GuildID       Secret                                       `json:"serverId" validate:"omitempty,numeric"`
+		Permissions   map[Permission]PrincipalList                 `json:"permissions,omitempty" validate:"omitempty"`
+		Notifications map[NotificationCategory]NotificationTargets `json:"notifications,omitempty" validate:"omitempty"`
 	}
 )
 
