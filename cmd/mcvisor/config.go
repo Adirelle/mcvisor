@@ -68,7 +68,8 @@ func (c *Config) ReadFrom(path string) error {
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
 		log.Printf("configuration file %s does not exist", path)
-		return nil
+		c.ConfigureDefaults()
+		return c.WriteTo(path)
 	} else if err != nil {
 		return err
 	}
