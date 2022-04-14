@@ -26,7 +26,7 @@ func main() {
 	rootSupervisor.Add(dispatcher)
 
 	dispatcher.Add(event.HandlerFunc(func(ev event.Event) {
-		log.Printf("%s %s: %s", ev.When(), ev.Type(), ev)
+		log.Printf("[%s]: %s", ev.Type(), ev)
 	}))
 
 	pinger := minecraft.MakePinger(*conf.Minecraft, dispatcher)

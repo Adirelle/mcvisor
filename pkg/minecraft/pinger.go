@@ -69,6 +69,10 @@ func MakePinger(conf Config, handler event.Handler) Pinger {
 	}
 }
 
+func (Pinger) GoString() string {
+	return "Pinger"
+}
+
 func (p Pinger) Serve(ctx context.Context) error {
 	if err := p.readSettings(); err != nil {
 		return err

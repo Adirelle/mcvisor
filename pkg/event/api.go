@@ -2,14 +2,13 @@ package event
 
 import (
 	"fmt"
-	"time"
 )
 
 type (
 	Event interface {
 		fmt.Stringer
 		Type() Type
-		When() time.Time
+		When() Time
 	}
 
 	Type string

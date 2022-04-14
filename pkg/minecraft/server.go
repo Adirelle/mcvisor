@@ -42,6 +42,10 @@ func MakeServer(conf Config, handler event.Handler) Server {
 	return Server{Config: conf, Handler: handler}
 }
 
+func (s Server) GoString() string {
+	return fmt.Sprintf("Minecraft Server (%s)", s.WorkingDir)
+}
+
 func (s Server) Serve(ctx context.Context) error {
 	s.HandleEvent(ServerStartingEvent{event.Now()})
 	proc, err := s.StartServer()

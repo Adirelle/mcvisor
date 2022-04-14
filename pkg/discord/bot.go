@@ -22,6 +22,10 @@ func NewBot(config Config, handler event.Handler) *Bot {
 	return &Bot{Config: config, Handler: handler}
 }
 
+func (b *Bot) GoString() string {
+	return "Discord Bot"
+}
+
 func (b *Bot) AppID() string {
 	if b.Session == nil {
 		return ""
