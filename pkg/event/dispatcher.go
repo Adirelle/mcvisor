@@ -5,7 +5,11 @@ import (
 )
 
 type (
-	Dispatcher struct {
+	Dispatcher interface {
+		DispatchEvent(Event)
+	}
+
+	AsyncDispatcher struct {
 		ctl      chan command
 		handlers []Handler
 	}
@@ -17,11 +21,11 @@ type (
 	dispatchCommand struct{ Event }
 )
 
-func NewDispatcher() *Dispatcher {
-	return &Dispatcher{ctl: make(chan command, 5)}
+func NewAsyncDispatcher() *AsyncDispatcher {
+	return &AsyncDispatcher{ctl: make(chan command, 5)}
 }
 
-func (d Dispatcher) Serve(ctx context.Context) error {
+func (d AsyncDispatcher) Serve(ctx context.Context) error {
 	for {
 		select {
 		case cmd := <-d.ctl:
@@ -32,7 +36,7 @@ func (d Dispatcher) Serve(ctx context.Context) error {
 	}
 }
 
-func (d *Dispatcher) handleCommand(cmd command) {
+func (d *AsyncDispatcher) handleCommand(cmd command) {
 	switch c := cmd.(type) {
 	case addCommand:
 		d.handlers = append(d.handlers, c.Handler)
@@ -50,14 +54,18 @@ func (d *Dispatcher) handleCommand(cmd command) {
 	}
 }
 
-func (d Dispatcher) HandleEvent(event Event) {
+func (d AsyncDispatcher) DispatchEvent(event Event) {
 	d.ctl <- dispatchCommand{event}
 }
 
-func (d Dispatcher) Add(handler Handler) {
+func (d AsyncDispatcher) HandleEvent(event Event) {
+	d.DispatchEvent(event)
+}
+
+func (d AsyncDispatcher) AddHandler(handler Handler) {
 	d.ctl <- addCommand{handler}
 }
 
-func (d Dispatcher) Remove(handler Handler) {
+func (d AsyncDispatcher) RemoveHandler(handler Handler) {
 	d.ctl <- removeCommand{handler}
 }

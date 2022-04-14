@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/Adirelle/mcvisor/pkg/event"
 	"github.com/bwmarrin/discordgo"
@@ -12,107 +13,110 @@ type (
 	CommandDef struct {
 		Name        string
 		Description string
-		Permission  Permission
+		Permission  PermissionCategory
 	}
 
-	ReceivedCommandEvent struct {
+	CommandReceivedEvent struct {
 		event.Time
-		CommandDef
-		Reply func(string)
+		Name      string
+		Reply     func(string)
+		Arguments []string
+		PrincipalHolder
+	}
+
+	messagePrincipalHolder struct {
+		*discordgo.Message
 	}
 )
 
-var ReceivedCommandType = event.Type("ReceivedCommand")
+var (
+	CommandReceivedType = event.Type("CommandReceived")
 
-func (e ReceivedCommandEvent) String() string {
-	return fmt.Sprintf("command received: %s", e.Name)
-}
+	HelpCommand = "help"
 
-func (e ReceivedCommandEvent) Type() event.Type {
-	return ReceivedCommandType
-}
-
-var commands = make(map[string]CommandDef)
+	commands          = make(map[string]CommandDef)
+	maxCommandNameLen = 0
+)
 
 func RegisterCommand(cmd CommandDef) {
 	commands[cmd.Name] = cmd
+	if l := len(cmd.Name); l > maxCommandNameLen {
+		maxCommandNameLen = l
+	}
 }
 
-func (b *Bot) registerCommands() error {
-	if b.Session == nil {
-		return fmt.Errorf("not connected")
-	}
-	appID := b.AppID()
-	guildID := b.GuildID()
-
-	for _, def := range commands {
-		var permissions *discordgo.ApplicationCommandPermissionsList = nil
-		if def.Permission != "" {
-			if permConfig, ok := b.Config.Permissions[def.Permission]; ok {
-				permissions = permConfig.toCommandPermissions(appID, guildID)
-			}
-		}
-		allowedToAll := permissions == nil
-
-		cmd := &discordgo.ApplicationCommand{
-			Name:              def.Name,
-			Description:       def.Description,
-			DefaultPermission: &allowedToAll,
-		}
-		result, err := b.ApplicationCommandCreate(appID, guildID, cmd)
-		if err != nil {
-			return fmt.Errorf("could not register command `%s`: %w", def.Name, err)
-		}
-
-		if !allowedToAll {
-			if err := b.ApplicationCommandPermissionsEdit(appID, guildID, result.ID, permissions); err != nil {
-				return fmt.Errorf("could not set permissions of command `%s`: %w", def.Name, err)
-			}
-		}
-	}
-
-	return nil
+func init() {
+	RegisterCommand(CommandDef{Name: HelpCommand, Description: "list all commands"})
 }
 
-func (b *Bot) unregisterCommands() error {
-	if b.Session == nil {
-		return fmt.Errorf("not connected")
-	}
-	appID := b.AppID()
-	guildID := b.GuildID()
-
-	cmds, err := b.ApplicationCommands(appID, guildID)
-	if err != nil {
-		return err
-	}
-	for _, cmd := range cmds {
-		if err := b.ApplicationCommandDelete(appID, guildID, cmd.ID); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (b *Bot) handleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	data := i.ApplicationCommandData()
-	log.Printf("received command: %#v", data)
-	def, known := commands[data.Name]
-	if !known {
-		log.Printf("received unknown command: %s", data.Name)
+func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if m.Author.ID == b.State.User.ID || len(m.Message.Content) < 2 || m.Message.Content[0] != byte(b.CommandPrefix) {
 		return
 	}
-	s.InteractionRespond(
-		i.Interaction,
-		&discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-		},
-	)
+	parts := strings.Split(m.Message.Content[1:], " ")
+	name := parts[0]
 
 	reply := func(message string) {
-		s.InteractionResponseEdit(b.AppID(), i.Interaction, &discordgo.WebhookEdit{Content: message})
+		_, err := s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{Content: message, Reference: m.Reference()})
+		if err != nil {
+			log.Printf("could not reply to %s: %s", m.Author.Username, err)
+		}
 	}
 
-	event := ReceivedCommandEvent{Time: event.Now(), CommandDef: def, Reply: reply}
-	b.Handler.HandleEvent(event)
+	def, found := commands[name]
+	if !found {
+		reply("**Unknown command**")
+		return
+	}
+	principalHolder := messagePrincipalHolder{m.Message}
+	if !b.Permissions.Allow(def.Permission, principalHolder) {
+		reply("**Permission denied**")
+		return
+	}
+	b.DispatchEvent(CommandReceivedEvent{event.Now(), def.Name, reply, parts[1:], principalHolder})
+}
+
+func (b *Bot) handleUserCommand(cmd CommandReceivedEvent) {
+	if cmd.Name != HelpCommand {
+		return
+	}
+	builder := strings.Builder{}
+	lineFmt := fmt.Sprintf("%c%%-%ds - %%s\n", b.CommandPrefix, maxCommandNameLen)
+	builder.WriteString("\n```\n")
+	for _, c := range commands {
+		if !b.Permissions.Allow(c.Permission, cmd.PrincipalHolder) {
+			continue
+		}
+		fmt.Fprintf(&builder, lineFmt, c.Name, c.Description)
+	}
+	builder.WriteString("```")
+	cmd.Reply(builder.String())
+}
+
+func (CommandReceivedEvent) Type() event.Type {
+	return CommandReceivedType
+}
+
+func (e CommandReceivedEvent) String() string {
+	return fmt.Sprintf("command received: %s (%v)", e.Name, e.Arguments)
+}
+
+func (m messagePrincipalHolder) HasUser(userID UserID) bool {
+	return m.Author != nil && m.Author.ID == string(userID)
+}
+
+func (m messagePrincipalHolder) HasRole(roleID RoleID) bool {
+	if m.Member == nil {
+		return false
+	}
+	for _, role := range m.Member.Roles {
+		if role == string(roleID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m messagePrincipalHolder) HasChannel(channelID ChannelID) bool {
+	return m.ChannelID == string(channelID)
 }

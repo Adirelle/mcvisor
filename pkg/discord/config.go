@@ -6,12 +6,16 @@ type (
 	Config struct {
 		Token         Secret                                       `json:"token" validate:"required"`
 		GuildID       Secret                                       `json:"serverId" validate:"omitempty,numeric"`
-		Permissions   map[Permission]PrincipalList                 `json:"permissions,omitempty" validate:"omitempty"`
+		CommandPrefix rune                                         `json:"commandPrefix" validate:"omitempty"`
+		Permissions   PermissionMap                                `json:"permissions,omitempty" validate:"omitempty"`
 		Notifications map[NotificationCategory]NotificationTargets `json:"notifications,omitempty" validate:"omitempty"`
 	}
 )
 
 func (c *Config) ConfigureDefaults() {
+	if c.CommandPrefix == 0 {
+		c.CommandPrefix = '!'
+	}
 }
 
 func (s Secret) Reveal() string {

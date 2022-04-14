@@ -22,26 +22,26 @@ func main() {
 
 	rootSupervisor := suture.NewSimple("mcvisor")
 
-	dispatcher := event.NewDispatcher()
+	dispatcher := event.NewAsyncDispatcher()
 	rootSupervisor.Add(dispatcher)
 
-	dispatcher.Add(event.HandlerFunc(func(ev event.Event) {
+	dispatcher.AddHandler(event.HandlerFunc(func(ev event.Event) {
 		log.Printf("[%s]: %s", ev.Type(), ev)
 	}))
 
-	pinger := minecraft.MakePinger(*conf.Minecraft, dispatcher)
+	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
 	rootSupervisor.Add(pinger)
-	dispatcher.Add(pinger)
+	dispatcher.AddHandler(pinger)
 
-	status := minecraft.NewStatusService(dispatcher)
+	status := minecraft.NewStatusMonitor(dispatcher)
 	rootSupervisor.Add(status)
-	dispatcher.Add(status)
+	dispatcher.AddHandler(status)
 
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	rootSupervisor.Add(bot)
-	dispatcher.Add(bot)
+	dispatcher.AddHandler(bot)
 
-	server := minecraft.MakeServer(*conf.Minecraft, dispatcher)
+	server := minecraft.NewServer(*conf.Minecraft, dispatcher)
 	rootSupervisor.Add(server)
 
 	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)

@@ -2,8 +2,6 @@ package discord
 
 import (
 	"log"
-
-	"github.com/Adirelle/mcvisor/pkg/event"
 )
 
 type (
@@ -22,17 +20,13 @@ var (
 	StatusCategory  NotificationCategory = "status"
 )
 
-func (b *Bot) HandleEvent(ev event.Event) {
-	notif, isNotif := ev.(Notification)
-	if !isNotif {
-		return
-	}
-	cat := notif.Category()
+func (b *Bot) handleNotification(n Notification) {
+	cat := n.Category()
 	targets, found := b.Notifications[cat]
 	if !found {
 		return
 	}
-	msg := notif.Message()
+	msg := n.Message()
 	for _, target := range targets {
 		channelID := target.Reveal()
 		_, err := b.ChannelMessageSend(channelID, msg)

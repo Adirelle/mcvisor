@@ -12,14 +12,13 @@ import (
 type (
 	Bot struct {
 		Config
-		event.Handler
-
+		event.Dispatcher
 		*discordgo.Session
 	}
 )
 
-func NewBot(config Config, handler event.Handler) *Bot {
-	return &Bot{Config: config, Handler: handler}
+func NewBot(config Config, dispatcher event.Dispatcher) *Bot {
+	return &Bot{Config: config, Dispatcher: dispatcher}
 }
 
 func (b *Bot) GoString() string {
@@ -43,21 +42,27 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 		return fmt.Errorf("could not connect to discord: %w", err)
 	}
 
-	b.AddHandler(b.handleCommand)
+	b.Identify.Intents = discordgo.IntentsGuildMessages
+	b.AddHandler(b.handleMessage)
 
 	if err = b.Open(); err != nil {
 		return fmt.Errorf("could not open the session: %w", err)
 	}
 	defer b.disconnect()
 
-	if err = b.registerCommands(); err != nil {
-		return err
-	}
-	defer b.unregisterCommands()
-
 	<-ctx.Done()
 
 	return nil
+}
+
+func (b *Bot) HandleEvent(ev event.Event) {
+	if ev.Type() == CommandReceivedType {
+		b.handleUserCommand(ev.(CommandReceivedEvent))
+		return
+	}
+	if n, ok := ev.(Notification); ok {
+		b.handleNotification(n)
+	}
 }
 
 func (b *Bot) disconnect() {

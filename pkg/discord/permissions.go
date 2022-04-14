@@ -1,47 +1,67 @@
 package discord
 
-import "github.com/bwmarrin/discordgo"
-
 type (
-	Principal struct {
-		UserID *Secret `json:"userId,omitempty" validate:"omitempty,required_without=RoleID,numeric"`
-		RoleID *Secret `json:"roleId,omitempty" validate:"omitempty,required_without=UserID,numeric"`
-	}
-	PrincipalList []Principal
+	UserID    Secret
+	ChannelID Secret
+	RoleID    Secret
 
-	Permission string
+	PrincipalHolder interface {
+		HasUser(userID UserID) bool
+		HasChannel(channelID ChannelID) bool
+		HasRole(roleID RoleID) bool
+	}
+
+	Permission interface {
+		accept(PrincipalHolder) bool
+	}
+
+	PermissionConfig struct {
+		*UserID    `json:"userId" validate:"omitempty,numeric"`
+		*RoleID    `json:"roleId" validate:"omitempty,numeric"`
+		*ChannelID `json:"channelId" validate:"omitempty,numeric"`
+	}
+
+	PermissionList []PermissionConfig
+
+	PermissionCategory string
+
+	PermissionMap map[PermissionCategory]PermissionList
 )
 
 var (
-	QueryPermission   Permission = "query"
-	ControlPermission Permission = "control"
+	QueryPermissionCategory   PermissionCategory = "query"
+	ControlPermissionCategory PermissionCategory = "control"
 )
 
-func (p Principal) toCommandPermission() *discordgo.ApplicationCommandPermissions {
-	if p.UserID != nil {
-		return &discordgo.ApplicationCommandPermissions{
-			Type:       discordgo.ApplicationCommandPermissionTypeUser,
-			ID:         p.UserID.Reveal(),
-			Permission: true,
-		}
-	}
-	if p.RoleID != nil {
-		return &discordgo.ApplicationCommandPermissions{
-			Type:       discordgo.ApplicationCommandPermissionTypeRole,
-			ID:         p.RoleID.Reveal(),
-			Permission: true,
-		}
-	}
-	return nil
+func (c *ChannelID) accept(h PrincipalHolder) bool {
+	return c != nil && h.HasChannel(*c)
 }
 
-func (ps PrincipalList) toCommandPermissions(appID string, guildID string) *discordgo.ApplicationCommandPermissionsList {
+func (r *RoleID) accept(h PrincipalHolder) bool {
+	return r != nil && h.HasRole(*r)
+}
+
+func (u *UserID) accept(h PrincipalHolder) bool {
+	return u != nil && h.HasUser(*u)
+}
+
+func (c PermissionConfig) accept(h PrincipalHolder) bool {
+	return c.UserID.accept(h) || c.RoleID.accept(h) || c.ChannelID.accept(h)
+}
+
+func (ps PermissionList) accept(h PrincipalHolder) bool {
 	if len(ps) == 0 {
-		return nil
+		return true
 	}
-	permissions := make([]*discordgo.ApplicationCommandPermissions, len(ps))
-	for i, p := range ps {
-		permissions[i] = p.toCommandPermission()
+	for _, p := range ps {
+		if p.accept(h) {
+			return true
+		}
 	}
-	return &discordgo.ApplicationCommandPermissionsList{Permissions: permissions}
+	return false
+}
+
+func (pm PermissionMap) Allow(c PermissionCategory, h PrincipalHolder) bool {
+	ps, found := pm[c]
+	return !found || ps.accept(h)
 }

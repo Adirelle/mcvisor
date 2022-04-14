@@ -15,7 +15,7 @@ import (
 type (
 	Server struct {
 		Config
-		event.Handler
+		event.Dispatcher
 	}
 
 	ServerStartedEvent  struct{ event.Time }
@@ -38,24 +38,24 @@ var (
 	ServerFailureType  event.Type = "ServerFailure"
 )
 
-func MakeServer(conf Config, handler event.Handler) Server {
-	return Server{Config: conf, Handler: handler}
+func NewServer(conf Config, dispatcher event.Dispatcher) *Server {
+	return &Server{Config: conf, Dispatcher: dispatcher}
 }
 
-func (s Server) GoString() string {
+func (s *Server) GoString() string {
 	return fmt.Sprintf("Minecraft Server (%s)", s.WorkingDir)
 }
 
-func (s Server) Serve(ctx context.Context) error {
-	s.HandleEvent(ServerStartingEvent{event.Now()})
+func (s *Server) Serve(ctx context.Context) error {
+	s.DispatchEvent(ServerStartingEvent{event.Now()})
 	proc, err := s.StartServer()
 	if err != nil {
-		s.HandleEvent(ServerFailureEvent{event.Now(), err})
+		s.DispatchEvent(ServerFailureEvent{event.Now(), err})
 		return err
 	}
-	s.HandleEvent(ServerStartedEvent{event.Now()})
+	s.DispatchEvent(ServerStartedEvent{event.Now()})
 	defer func() {
-		s.HandleEvent(ServerStoppedEvent{event.Now()})
+		s.DispatchEvent(ServerStoppedEvent{event.Now()})
 	}()
 
 	if err := s.WritePid(s.PidFile, proc.Pid); err != nil {
@@ -69,13 +69,13 @@ func (s Server) Serve(ctx context.Context) error {
 
 	if !state.Success() {
 		err = fmt.Errorf("exited: %t, exitCode: %d", state.Exited(), state.ExitCode())
-		s.HandleEvent(ServerFailureEvent{event.Now(), err})
+		s.DispatchEvent(ServerFailureEvent{event.Now(), err})
 	}
 
 	return nil
 }
 
-func (s Server) StartServer() (proc *os.Process, err error) {
+func (s *Server) StartServer() (proc *os.Process, err error) {
 	cmdLine := s.CmdLine()
 
 	attr := os.ProcAttr{
@@ -93,18 +93,18 @@ func (s Server) StartServer() (proc *os.Process, err error) {
 	return
 }
 
-func (s Server) Wait(ctx context.Context, proc *os.Process) (*os.ProcessState, error) {
+func (s *Server) Wait(ctx context.Context, proc *os.Process) (*os.ProcessState, error) {
 	ctl := make(chan struct{})
 	defer close(ctl)
 	go s.KillOnContextDone(ctx, proc, ctl)
 	return proc.Wait()
 }
 
-func (s Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-chan struct{}) {
+func (s *Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-chan struct{}) {
 	select {
 	case <-ctl:
 	case <-ctx.Done():
-		s.Handler.HandleEvent(ServerStoppingEvent{event.Now()})
+		s.DispatchEvent(ServerStoppingEvent{event.Now()})
 		err := proc.Kill()
 		if err != nil {
 			log.Printf("could not kill process #%d: %s", proc.Pid, err)
@@ -112,12 +112,12 @@ func (s Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-c
 		select {
 		case <-ctl:
 		case <-time.After(ServerStoppingDelay):
-			log.Printf("server still alive after %d", ServerStoppingDelay.String())
+			log.Printf("server still alive after %s", ServerStoppingDelay.String())
 		}
 	}
 }
 
-func (s Server) WritePid(pidFile string, pid int) error {
+func (s *Server) WritePid(pidFile string, pid int) error {
 	writer, err := os.OpenFile(pidFile, os.O_CREATE|os.O_TRUNC, os.FileMode(0o600))
 	if err != nil {
 		return err

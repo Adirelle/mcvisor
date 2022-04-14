@@ -3,7 +3,6 @@ package minecraft
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/event"
@@ -12,10 +11,10 @@ import (
 type (
 	ServerStatus int
 
-	StatusService struct {
+	StatusMonitor struct {
 		ServerStatus
-		LastUpdate time.Time
-		event.Handler
+		LastUpdate event.Time
+		event.Dispatcher
 	}
 
 	ServerStatusChangedEvent struct {
@@ -24,9 +23,7 @@ type (
 	}
 )
 
-var (
-	ServerStatusChangedType = event.Type("ServerStatusChanged")
-)
+var ServerStatusChangedType = event.Type("ServerStatusChanged")
 
 const (
 	ServerStopped ServerStatus = iota
@@ -35,34 +32,42 @@ const (
 	ServerReady
 	ServerUnreachable
 	ServerStopping
+
+	StatusCommand string = "status"
 )
 
 func init() {
 	discord.RegisterCommand(discord.CommandDef{
-		Name:        "status",
+		Name:        StatusCommand,
 		Description: "check server status",
-		Permission:  discord.QueryPermission,
+		Permission:  discord.QueryPermissionCategory,
 	})
 }
 
-func NewStatusService(handler event.Handler) *StatusService {
-	return &StatusService{Handler: handler, ServerStatus: ServerStopped}
+func NewStatusMonitor(dispatcher event.Dispatcher) *StatusMonitor {
+	return &StatusMonitor{Dispatcher: dispatcher, ServerStatus: ServerStopped}
 }
 
-func (s *StatusService) Serve(ctx context.Context) error {
+func (s *StatusMonitor) GoString() string {
+	return "Status Monitor"
+}
+
+func (s *StatusMonitor) Serve(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
 
-func (s *StatusService) HandleEvent(ev event.Event) {
+func (s *StatusMonitor) HandleEvent(ev event.Event) {
+	if c, ok := ev.(discord.CommandReceivedEvent); ok && c.Name == StatusCommand {
+		c.Reply(fmt.Sprintf("%s since %s", s.ServerStatus, s.LastUpdate.DiscordRelative()))
+		return
+	}
+
 	newStatus := s.ServerStatus.resolve(ev)
 	if newStatus != s.ServerStatus {
 		s.ServerStatus = newStatus
-		s.LastUpdate = time.Now()
-		s.Handler.HandleEvent(ServerStatusChangedEvent{event.Time(s.LastUpdate), s.ServerStatus})
-	}
-	if c, ok := ev.(discord.ReceivedCommandEvent); ok && c.CommandDef.Name == "status" {
-		c.Reply(fmt.Sprintf("Server is %s", s.ServerStatus))
+		s.LastUpdate = event.Now()
+		s.DispatchEvent(ServerStatusChangedEvent{event.Time(s.LastUpdate), s.ServerStatus})
 	}
 }
 
@@ -112,7 +117,7 @@ func (ServerStatusChangedEvent) Type() event.Type {
 }
 
 func (e ServerStatusChangedEvent) String() string {
-	return fmt.Sprintf("status changed to %s ", e.Status)
+	return fmt.Sprintf("status changed to %s", e.Status)
 }
 
 func (e ServerStatusChangedEvent) Category() discord.NotificationCategory {
@@ -125,5 +130,5 @@ func (e ServerStatusChangedEvent) Category() discord.NotificationCategory {
 }
 
 func (e ServerStatusChangedEvent) Message() string {
-	return fmt.Sprintf("Server %s", e.Status)
+	return "Server " + e.Status.String()
 }
