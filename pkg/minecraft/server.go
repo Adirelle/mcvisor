@@ -125,13 +125,13 @@ func (s Server) WritePid(pidFile string, pid int) error {
 func (ServerStartingEvent) String() string   { return "server starting" }
 func (ServerStartingEvent) Type() event.Type { return ServerStartingType }
 
-func (ServerStartedEvent) String() string   { return "server starting" }
+func (ServerStartedEvent) String() string   { return "server started" }
 func (ServerStartedEvent) Type() event.Type { return ServerStartedType }
 
-func (ServerStoppingEvent) String() string   { return "server starting" }
+func (ServerStoppingEvent) String() string   { return "server stopping" }
 func (ServerStoppingEvent) Type() event.Type { return ServerStoppingType }
 
-func (ServerStoppedEvent) String() string   { return "server starting" }
+func (ServerStoppedEvent) String() string   { return "server stopped" }
 func (ServerStoppedEvent) Type() event.Type { return ServerStoppedType }
 
 func (e ServerFailureEvent) String() string { return fmt.Sprintf("server failure: %s", e.Reason) }
