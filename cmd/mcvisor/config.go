@@ -19,14 +19,14 @@ const (
 type (
 	Config struct {
 		Minecraft *minecraft.Config `json:"minecraft" validate:"required"`
-		Discord *discord.Config `json:"discord" validate:"required"`
+		Discord   *discord.Config   `json:"discord" validate:"required"`
 	}
 )
 
 func NewConfig() *Config {
 	return &Config{
 		Minecraft: &minecraft.Config{},
-		Discord: &discord.Config{},
+		Discord:   &discord.Config{},
 	}
 }
 

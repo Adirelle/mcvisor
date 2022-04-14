@@ -6,15 +6,15 @@ import (
 
 type (
 	Dispatcher struct {
-		ctl chan command
+		ctl      chan command
 		handlers []Handler
 	}
 
-	command interface {}
+	command interface{}
 
-	addCommand struct { Handler }
-	removeCommand struct { Handler }
-	dispatchCommand struct { Event }
+	addCommand      struct{ Handler }
+	removeCommand   struct{ Handler }
+	dispatchCommand struct{ Event }
 )
 
 func NewDispatcher() *Dispatcher {
@@ -24,9 +24,9 @@ func NewDispatcher() *Dispatcher {
 func (d Dispatcher) Serve(ctx context.Context) error {
 	for {
 		select {
-		case cmd := <- d.ctl:
+		case cmd := <-d.ctl:
 			d.handleCommand(cmd)
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return nil
 		}
 	}

@@ -6,19 +6,19 @@ import (
 )
 
 const (
-	DefaultServerJar = "server.jar"
-	DefaultPidfile = "server.pid"
+	DefaultServerJar        = "server.jar"
+	DefaultPidfile          = "server.pid"
 	DefaultServerProperties = "server.properties"
-	JaveHomeEnvName = "JAVA_HOME"
+	JaveHomeEnvName         = "JAVA_HOME"
 )
 
 type Config struct {
-	WorkingDir string `json:"working_dir,omitempty" validate:"dir"`
-	JavaHome string `json:"java_home,omitempty" validate:"dir"`
+	WorkingDir     string   `json:"working_dir,omitempty" validate:"dir"`
+	JavaHome       string   `json:"java_home,omitempty" validate:"dir"`
 	JavaParameters []string `json:"java_parameters,omitempty"`
-	ServerJarPath string `json:"server_jar,omitempty" validate:"file"`
-	Parameters []string `json:"parameters,omitempty"`
-	PidFile string `json:"pid_file,omitempty"`
+	ServerJarPath  string   `json:"server_jar,omitempty" validate:"file"`
+	Parameters     []string `json:"parameters,omitempty"`
+	PidFile        string   `json:"pid_file,omitempty"`
 }
 
 func (c *Config) ConfigureDefaults() {
@@ -59,12 +59,12 @@ func (c Config) CmdLine() []string {
 		append(
 			append(
 				[]string{c.Command()},
-				 c.JavaParameters...
+				c.JavaParameters...,
 			),
-	 		"-jar",
+			"-jar",
 			c.ServerJarPath,
 		),
-		c.Parameters...
+		c.Parameters...,
 	)
 }
 
@@ -75,12 +75,12 @@ func (c Config) ServerPropertiesPath() string {
 func (c Config) Env() []string {
 	return append(
 		os.Environ(),
-		JaveHomeEnvName + "=" + c.JavaHome,
+		JaveHomeEnvName+"="+c.JavaHome,
 	)
 }
 
 func resolvePath(base, path string) string {
-	if (filepath.IsAbs(path)) {
+	if filepath.IsAbs(path) {
 		return path
 	}
 	return filepath.Join(base, path)
