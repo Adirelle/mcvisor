@@ -11,29 +11,29 @@ import (
 )
 
 type (
-	ServerStatus int
+	Status int
 
 	StatusMonitor struct {
-		ServerStatus
+		Status
 		LastUpdate events.Time
 		events.Dispatcher
 	}
 
-	ServerStatusChangedEvent struct {
+	StatusChanged struct {
 		events.Time
-		Status ServerStatus
+		Status Status
 	}
 )
 
-var ServerStatusChangedType = events.Type("ServerStatusChanged")
+var ServerStatusChangedType = events.Type("StatusChanged")
 
 const (
-	ServerStopped ServerStatus = iota
-	ServerStarting
-	ServerStarted
-	ServerReady
-	ServerUnreachable
-	ServerStopping
+	Stopped Status = iota
+	Starting
+	Started
+	Ready
+	Unreachable
+	Stopping
 
 	StatusCommand commands.Name = "status"
 )
@@ -47,7 +47,7 @@ func init() {
 }
 
 func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {
-	return &StatusMonitor{Dispatcher: dispatcher, ServerStatus: ServerStopped}
+	return &StatusMonitor{Dispatcher: dispatcher, Status: Stopped}
 }
 
 func (s *StatusMonitor) GoString() string {
@@ -61,76 +61,76 @@ func (s *StatusMonitor) Serve(ctx context.Context) error {
 
 func (s *StatusMonitor) HandleEvent(ev events.Event) {
 	if c, ok := ev.(commands.Command); ok && c.Name == StatusCommand {
-		fmt.Fprintf(c.Reply, "%s since %s", s.ServerStatus, s.LastUpdate.DiscordRelative())
+		fmt.Fprintf(c.Reply, "%s since %s", s.Status, s.LastUpdate.DiscordRelative())
 		return
 	}
 
-	newStatus := s.ServerStatus.resolve(ev)
-	if newStatus != s.ServerStatus {
-		s.ServerStatus = newStatus
+	newStatus := s.Status.resolve(ev)
+	if newStatus != s.Status {
+		s.Status = newStatus
 		s.LastUpdate = events.Now()
-		s.DispatchEvent(ServerStatusChangedEvent{events.Time(s.LastUpdate), s.ServerStatus})
+		s.DispatchEvent(StatusChanged{events.Time(s.LastUpdate), s.Status})
 	}
 }
 
-func (s ServerStatus) resolve(ev events.Event) ServerStatus {
+func (s Status) resolve(ev events.Event) Status {
 	switch ev.(type) {
-	case ServerStartingEvent:
-		return ServerStarting
-	case ServerStartedEvent:
-		return ServerStarted
-	case ServerStoppingEvent:
-		return ServerStopping
-	case ServerStoppedEvent:
-		return ServerStopped
-	case PingSucceededEvent:
-		if s == ServerStarted || s == ServerUnreachable {
-			return ServerReady
+	case ServerStarting:
+		return Starting
+	case ServerStarted:
+		return Started
+	case ServerStopping:
+		return Stopping
+	case ServerStopped:
+		return Stopped
+	case PingSucceeded:
+		if s == Started || s == Unreachable {
+			return Ready
 		}
-	case PingFailedEvent:
-		if s == ServerReady {
-			return ServerUnreachable
+	case PingFailed:
+		if s == Ready {
+			return Unreachable
 		}
 	}
 	return s
 }
 
-func (s ServerStatus) String() string {
+func (s Status) String() string {
 	switch s {
-	case ServerStopped:
+	case Stopped:
 		return "stopped"
-	case ServerStarting:
+	case Starting:
 		return "starting"
-	case ServerStarted:
+	case Started:
 		return "started"
-	case ServerReady:
+	case Ready:
 		return "ready"
-	case ServerUnreachable:
+	case Unreachable:
 		return "unreachable"
-	case ServerStopping:
+	case Stopping:
 		return "stopping"
 	default:
 		return fmt.Sprintf("in an unknown state (%d)", s)
 	}
 }
 
-func (ServerStatusChangedEvent) Type() events.Type {
+func (StatusChanged) Type() events.Type {
 	return ServerStatusChangedType
 }
 
-func (e ServerStatusChangedEvent) String() string {
+func (e StatusChanged) String() string {
 	return fmt.Sprintf("status changed to %s", e.Status)
 }
 
-func (e ServerStatusChangedEvent) Category() discord.NotificationCategory {
+func (e StatusChanged) Category() discord.NotificationCategory {
 	switch e.Status {
-	case ServerStarting, ServerReady, ServerUnreachable, ServerStopped:
+	case Starting, Ready, Unreachable, Stopped:
 		return discord.StatusCategory
 	default:
 		return discord.IgnoredCategory
 	}
 }
 
-func (e ServerStatusChangedEvent) Message() string {
+func (e StatusChanged) Message() string {
 	return "Server " + e.Status.String()
 }

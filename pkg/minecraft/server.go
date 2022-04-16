@@ -18,11 +18,11 @@ type (
 		events.Dispatcher
 	}
 
-	ServerStartedEvent  struct{ events.Time }
-	ServerStartingEvent struct{ events.Time }
-	ServerStoppedEvent  struct{ events.Time }
-	ServerStoppingEvent struct{ events.Time }
-	ServerFailureEvent  struct {
+	ServerStarted  struct{ events.Time }
+	ServerStarting struct{ events.Time }
+	ServerStopped  struct{ events.Time }
+	ServerStopping struct{ events.Time }
+	ServerFailure  struct {
 		events.Time
 		Reason error
 	}
@@ -47,15 +47,15 @@ func (s *Server) GoString() string {
 }
 
 func (s *Server) Serve(ctx context.Context) error {
-	s.DispatchEvent(ServerStartingEvent{events.Now()})
+	s.DispatchEvent(ServerStarting{events.Now()})
 	proc, err := s.StartServer()
 	if err != nil {
-		s.DispatchEvent(ServerFailureEvent{events.Now(), err})
+		s.DispatchEvent(ServerFailure{events.Now(), err})
 		return err
 	}
-	s.DispatchEvent(ServerStartedEvent{events.Now()})
+	s.DispatchEvent(ServerStarted{events.Now()})
 	defer func() {
-		s.DispatchEvent(ServerStoppedEvent{events.Now()})
+		s.DispatchEvent(ServerStopped{events.Now()})
 	}()
 
 	if err := s.WritePid(s.PidFile, proc.Pid); err != nil {
@@ -69,7 +69,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	if !state.Success() {
 		err = fmt.Errorf("exited: %t, exitCode: %d", state.Exited(), state.ExitCode())
-		s.DispatchEvent(ServerFailureEvent{events.Now(), err})
+		s.DispatchEvent(ServerFailure{events.Now(), err})
 	}
 
 	return nil
@@ -104,7 +104,7 @@ func (s *Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-
 	select {
 	case <-ctl:
 	case <-ctx.Done():
-		s.DispatchEvent(ServerStoppingEvent{events.Now()})
+		s.DispatchEvent(ServerStopping{events.Now()})
 		err := proc.Kill()
 		if err != nil {
 			log.Printf("could not kill process #%d: %s", proc.Pid, err)
@@ -122,21 +122,22 @@ func (s *Server) WritePid(pidFile string, pid int) error {
 	if err != nil {
 		return err
 	}
-	writer.WriteString(strconv.Itoa(pid))
-	return writer.Close()
+	_, err = writer.WriteString(strconv.Itoa(pid))
+	writer.Close()
+	return err
 }
 
-func (ServerStartingEvent) String() string    { return "server starting" }
-func (ServerStartingEvent) Type() events.Type { return ServerStartingType }
+func (ServerStarting) String() string    { return "server starting" }
+func (ServerStarting) Type() events.Type { return ServerStartingType }
 
-func (ServerStartedEvent) String() string    { return "server started" }
-func (ServerStartedEvent) Type() events.Type { return ServerStartedType }
+func (ServerStarted) String() string    { return "server started" }
+func (ServerStarted) Type() events.Type { return ServerStartedType }
 
-func (ServerStoppingEvent) String() string    { return "server stopping" }
-func (ServerStoppingEvent) Type() events.Type { return ServerStoppingType }
+func (ServerStopping) String() string    { return "server stopping" }
+func (ServerStopping) Type() events.Type { return ServerStoppingType }
 
-func (ServerStoppedEvent) String() string    { return "server stopped" }
-func (ServerStoppedEvent) Type() events.Type { return ServerStoppedType }
+func (ServerStopped) String() string    { return "server stopped" }
+func (ServerStopped) Type() events.Type { return ServerStoppedType }
 
-func (e ServerFailureEvent) String() string  { return fmt.Sprintf("server failure: %s", e.Reason) }
-func (ServerFailureEvent) Type() events.Type { return ServerFailureType }
+func (e ServerFailure) String() string  { return fmt.Sprintf("server failure: %s", e.Reason) }
+func (ServerFailure) Type() events.Type { return ServerFailureType }

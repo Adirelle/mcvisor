@@ -39,11 +39,11 @@ type (
 		queryPort     uint16
 	}
 
-	PingSucceededEvent struct {
+	PingSucceeded struct {
 		events.Time
 	}
 
-	PingFailedEvent struct {
+	PingFailed struct {
 		events.Time
 		Reason error
 	}
@@ -108,9 +108,9 @@ func (p *Pinger) Ping() {
 		err = ErrBothQueryAndStatusDisabled
 	}
 	if err == nil {
-		p.DispatchEvent(PingSucceededEvent{events.Now()})
+		p.DispatchEvent(PingSucceeded{events.Now()})
 	} else {
-		p.DispatchEvent(PingFailedEvent{events.Now(), err})
+		p.DispatchEvent(PingFailed{events.Now(), err})
 	}
 }
 
@@ -132,7 +132,7 @@ func (p *Pinger) HandleEvent(ev events.Event) {
 
 func (p *Pinger) handleOnlineCommand(c commands.Command) {
 	if !p.queryEnabled {
-		io.WriteString(c.Reply, "query is disabled on the server")
+		_, _ = io.WriteString(c.Reply, "query is disabled on the server")
 		return
 	}
 	response, err := mcstatusgo.FullQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout)
@@ -149,9 +149,9 @@ func (p *Pinger) handleOnlineCommand(c commands.Command) {
 
 	log.Printf("could not query server: %s", err)
 	if netErr, isNetError := err.(net.Error); isNetError && netErr.Timeout() {
-		io.WriteString(c.Reply, "could not contact server")
+		_, _ = io.WriteString(c.Reply, "could not contact server")
 	} else {
-		io.WriteString(c.Reply, "internal error")
+		_, _ = io.WriteString(c.Reply, "internal error")
 	}
 }
 
@@ -167,8 +167,8 @@ func (p *Pinger) readSettings() error {
 	return nil
 }
 
-func (PingSucceededEvent) Type() events.Type { return PingSucceededType }
-func (PingSucceededEvent) String() string    { return "ping succeeded" }
+func (PingSucceeded) Type() events.Type { return PingSucceededType }
+func (PingSucceeded) String() string    { return "ping succeeded" }
 
-func (PingFailedEvent) Type() events.Type { return PingFailedType }
-func (e PingFailedEvent) String() string  { return fmt.Sprintf("ping failed: %s", e.Reason) }
+func (PingFailed) Type() events.Type { return PingFailedType }
+func (e PingFailed) String() string  { return fmt.Sprintf("ping failed: %s", e.Reason) }

@@ -14,6 +14,14 @@ import (
 	"github.com/thejerf/suture/v4"
 )
 
+type (
+	serverControl struct {
+		supervisor *suture.Supervisor
+		server     suture.Service
+		token      *suture.ServiceToken
+	}
+)
+
 func main() {
 	conf := NewConfig()
 	err := conf.Load()
@@ -28,10 +36,7 @@ func main() {
 	rootSupervisor.Add(dispatcher)
 
 	dispatcher.AddHandler(commands.EventHandler)
-
-	dispatcher.AddHandler(events.HandlerFunc(func(ev events.Event) {
-		log.Printf("[%s]: %s", ev.Type(), ev)
-	}))
+	dispatcher.AddHandler(events.HandlerFunc(LogEvent))
 
 	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
 	rootSupervisor.Add(pinger)
@@ -46,12 +51,46 @@ func main() {
 	dispatcher.AddHandler(bot)
 
 	server := minecraft.NewServer(*conf.Minecraft, dispatcher)
-	rootSupervisor.Add(server)
+	control := &serverControl{supervisor: rootSupervisor, server: server}
+	controller := minecraft.NewController(control)
+	rootSupervisor.Add(controller)
 
-	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
-	err = rootSupervisor.Serve(ctx)
+	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
 
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-signals
+		stopSupervisor()
+	}()
+
+	err = rootSupervisor.Serve(supervisorCtx)
 	if err != nil && err != context.Canceled {
 		log.Fatalf("exit reason: %s", err)
 	}
+}
+
+func LogEvent(ev events.Event) {
+	log.Printf("[%s]: %s", ev.Type(), ev)
+}
+
+func (c *serverControl) Start() {
+	if c.token != nil {
+		return
+	}
+	log.Printf("starting the server service")
+	token := c.supervisor.Add(c.server)
+	c.token = &token
+}
+
+func (c *serverControl) Stop() {
+	if c.token == nil {
+		return
+	}
+	log.Printf("stopping the server service")
+	err := c.supervisor.RemoveAndWait(*c.token, 0)
+	if err != nil {
+		log.Printf("error stopping server: %s", err)
+	}
+	c.token = nil
 }
