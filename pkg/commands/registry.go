@@ -47,18 +47,18 @@ func handleCommands(event events.Event) {
 
 func HandleHelpCommand(cmd Command) {
 	lineFmt := fmt.Sprintf("%%-%ds - %%s\n", maxCommandNameLen)
-	io.WriteString(cmd.Reply, "\n```\n")
+	_, _ = io.WriteString(cmd.Reply, "\n```\n")
 	for _, def := range commands {
 		if def.Allow(cmd) {
-			fmt.Fprintf(cmd.Reply, lineFmt, def.Name, def.Description)
+			_, _ = fmt.Fprintf(cmd.Reply, lineFmt, def.Name, def.Description)
 		}
 	}
-	io.WriteString(cmd.Reply, "```")
+	_, _ = io.WriteString(cmd.Reply, "```")
 }
 
 func HandlePermCommand(cmd Command) {
-	io.WriteString(cmd.Reply, "Command permissons:\n")
+	_, _ = io.WriteString(cmd.Reply, "Command permissons:\n")
 	for _, c := range commands {
-		fmt.Fprintf(cmd.Reply, "`%s`: %s\n", c.Name, c.Permission().DescribePermission())
+		_, _ = fmt.Fprintf(cmd.Reply, "`%s`: %s\n", c.Name, c.Permission().DescribePermission())
 	}
 }

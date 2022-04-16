@@ -29,10 +29,13 @@ func (b *Bot) handleCommandMessage(session *discordgo.Session, message *discordg
 			log.Printf("command: %s> %s: success", message.Author.Username, message.Content)
 		}
 		if response.Len() > 0 {
-			session.ChannelMessageSendComplex(
+			_, err = session.ChannelMessageSendComplex(
 				message.ChannelID,
 				&discordgo.MessageSend{Content: response.String(), Reference: message.Reference()},
 			)
+			if err != nil {
+				log.Printf("could not reply to command: %d", err)
+			}
 		}
 	}()
 
