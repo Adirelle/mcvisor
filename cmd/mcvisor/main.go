@@ -19,6 +19,7 @@ type (
 		supervisor *suture.Supervisor
 		server     suture.Service
 		token      *suture.ServiceToken
+		stop       func()
 	}
 )
 
@@ -50,18 +51,19 @@ func main() {
 	rootSupervisor.Add(bot)
 	dispatcher.AddHandler(bot)
 
+	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
+
 	server := minecraft.NewServer(*conf.Minecraft, dispatcher)
-	control := &serverControl{supervisor: rootSupervisor, server: server}
+	control := &serverControl{supervisor: rootSupervisor, server: server, stop: stopSupervisor}
 	controller := minecraft.NewController(control)
 	rootSupervisor.Add(controller)
-
-	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
+	dispatcher.AddHandler(controller)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-signals
-		stopSupervisor()
+		controller.SetTarget(minecraft.ShutdownTarget)
 	}()
 
 	err = rootSupervisor.Serve(supervisorCtx)
@@ -78,7 +80,6 @@ func (c *serverControl) Start() {
 	if c.token != nil {
 		return
 	}
-	log.Printf("starting the server service")
 	token := c.supervisor.Add(c.server)
 	c.token = &token
 }
@@ -87,10 +88,13 @@ func (c *serverControl) Stop() {
 	if c.token == nil {
 		return
 	}
-	log.Printf("stopping the server service")
 	err := c.supervisor.RemoveAndWait(*c.token, 0)
 	if err != nil {
 		log.Printf("error stopping server: %s", err)
 	}
 	c.token = nil
+}
+
+func (c *serverControl) Terminate() {
+	c.stop()
 }

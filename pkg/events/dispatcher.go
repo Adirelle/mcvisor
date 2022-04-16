@@ -27,7 +27,7 @@ type (
 )
 
 func NewAsyncDispatcher() *AsyncDispatcher {
-	return &AsyncDispatcher{ctl: make(chan command, 5)}
+	return &AsyncDispatcher{ctl: make(chan command, 20)}
 }
 
 func (d *AsyncDispatcher) Serve(ctx context.Context) error {

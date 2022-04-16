@@ -20,7 +20,15 @@ var (
 	EventHandler = events.HandlerFunc(handleCommands)
 )
 
-func Register(def Definition) {
+func RegisterPublic(name Name, description string) {
+	Register(name, description, permissions.Anyone)
+}
+
+func Register(name Name, description string, category permissions.Category) {
+	RegisterDefinition(Definition{name, description, category})
+}
+
+func RegisterDefinition(def Definition) {
 	commands[def.Name] = def
 	if l := len(def.Name); l > maxCommandNameLen {
 		maxCommandNameLen = l
@@ -28,8 +36,8 @@ func Register(def Definition) {
 }
 
 func init() {
-	Register(Definition{HelpCommand, "list all commands", permissions.Anyone})
-	Register(Definition{PermCommand, "show current command permissions", permissions.AdminCategory})
+	RegisterPublic(HelpCommand, "list all commands")
+	Register(PermCommand, "show current command permissions", permissions.AdminCategory)
 }
 
 func handleCommands(event events.Event) {
@@ -49,7 +57,7 @@ func HandleHelpCommand(cmd Command) {
 	lineFmt := fmt.Sprintf("%%-%ds - %%s\n", maxCommandNameLen)
 	_, _ = io.WriteString(cmd.Reply, "\n```\n")
 	for _, def := range commands {
-		if def.Allow(cmd) {
+		if def.Allow(cmd.Actor) {
 			_, _ = fmt.Fprintf(cmd.Reply, lineFmt, def.Name, def.Description)
 		}
 	}

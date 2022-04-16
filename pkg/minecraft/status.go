@@ -25,7 +25,7 @@ type (
 	}
 )
 
-var ServerStatusChangedType = events.Type("StatusChanged")
+var StatusChangedType = events.Type("StatusChanged")
 
 const (
 	Stopped Status = iota
@@ -39,11 +39,7 @@ const (
 )
 
 func init() {
-	commands.Register(commands.Definition{
-		Name:        StatusCommand,
-		Description: "check server status",
-		Category:    permissions.QueryCategory,
-	})
+	commands.Register(StatusCommand, "check server status", permissions.QueryCategory)
 }
 
 func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {
@@ -115,7 +111,7 @@ func (s Status) String() string {
 }
 
 func (StatusChanged) Type() events.Type {
-	return ServerStatusChangedType
+	return StatusChangedType
 }
 
 func (e StatusChanged) String() string {

@@ -30,6 +30,7 @@ type (
 		propertyPath string
 		events.Dispatcher
 		*pingerSettings
+		started bool
 	}
 
 	pingerSettings struct {
@@ -61,11 +62,7 @@ const (
 )
 
 func init() {
-	commands.Register(commands.Definition{
-		Name:        OnlineCommand,
-		Description: "list online players",
-		Category:    permissions.QueryCategory,
-	})
+	commands.Register(OnlineCommand, "list online players", permissions.QueryCategory)
 }
 
 func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
@@ -73,6 +70,7 @@ func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
 		propertyPath:   conf.ServerPropertiesPath(),
 		Dispatcher:     dispatcher,
 		pingerSettings: new(pingerSettings),
+		started:        false,
 	}
 }
 
@@ -99,6 +97,9 @@ func (p *Pinger) Serve(ctx context.Context) error {
 }
 
 func (p *Pinger) Ping() {
+	if !p.started {
+		return
+	}
 	var err error
 	if p.queryEnabled {
 		err = p.sendQuery()
@@ -124,9 +125,16 @@ func (p *Pinger) getStatus() (err error) {
 	return
 }
 
-func (p *Pinger) HandleEvent(ev events.Event) {
-	if c, ok := ev.(commands.Command); ok && c.Name == OnlineCommand {
-		p.handleOnlineCommand(c)
+func (p *Pinger) HandleEvent(event events.Event) {
+	switch ev := event.(type) {
+	case commands.Command:
+		if ev.Name == OnlineCommand {
+			p.handleOnlineCommand(ev)
+		}
+	case ServerStarted:
+		p.started = true
+	case ServerStopping, ServerStopped:
+		p.started = false
 	}
 }
 
