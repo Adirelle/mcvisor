@@ -53,7 +53,7 @@ func main() {
 
 	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
 	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: serverServices, stop: stopSupervisor}
-	controller := minecraft.NewController(control)
+	controller := minecraft.NewController(control, rootSupervisor.Dispatcher)
 	rootSupervisor.Add(controller)
 
 	signals := make(chan os.Signal, 1)
