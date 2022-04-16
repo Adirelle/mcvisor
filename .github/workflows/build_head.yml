@@ -14,7 +14,17 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: windows
+            goarch: amd64
     runs-on: ubuntu-latest
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
     steps:
       - id: vars
         run: |
@@ -29,10 +39,10 @@ jobs:
           go-version: "^1.18"
 
       - name: build mcvisor
-        run: go build ./cmd/mcvisor
+        run: go build ./cmd/mcvisor -o "mcvisor_${{ steps.vars.outputs.COMMIT_HASH }}_${{ matrix.goos }}_${{ matrix.goarch }}"
 
       - name: upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: mcvisor ${{ steps.vars.outputs.COMMIT_HASH }}
-          path: "./mcvisor"
+          path: "./mcvisor*"
