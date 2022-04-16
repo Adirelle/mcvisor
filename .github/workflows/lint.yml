@@ -1,4 +1,4 @@
-name: head
+name: Linting
 
 on: [push, pull_request]
 
@@ -6,15 +6,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: check out sources
+      - name: Check out sources
         uses: actions/checkout@v2
 
-      - name: setup go
+      - name: Set up go
         uses: actions/setup-go@v3
         with:
           go-version: "^1.18"
 
-      - name: golangci-lint
+      - name: Lint sources
         uses: golangci/golangci-lint-action@v3
         with:
           version: v1.45
