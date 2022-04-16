@@ -1,0 +1,43 @@
+name: head
+
+on:
+  push:
+    branches:
+      - "**"
+    tags-ignore:
+      - "*"
+  pull_request:
+    branches:
+      - "**"
+    tags-ignore:
+      - "*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - id: vars
+        run: |
+          echo ::set-output name=COMMIT_HASH::${GITHUB_SHA:0:7}
+
+      - name: check out sources
+        uses: actions/checkout@v2
+
+      - name: setup go
+        uses: actions/setup-go@v3
+        with:
+          go-version: "^1.18"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.45
+
+      - name: build mcvisor
+        run: go build ./cmd/mcvisor
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: mcvisor ${{ steps.vars.outputs.COMMIT_HASH }}
+          path: "./mcvisor"
