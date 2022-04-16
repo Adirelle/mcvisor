@@ -2,8 +2,6 @@ package discord
 
 import (
 	"log"
-
-	"github.com/Adirelle/mcvisor/pkg/utils"
 )
 
 type (
@@ -14,7 +12,7 @@ type (
 
 	NotificationCategory string
 
-	NotificationTargets []utils.Secret
+	NotificationTargets []Snowflake
 )
 
 const (

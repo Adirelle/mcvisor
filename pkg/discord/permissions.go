@@ -4,21 +4,20 @@ import (
 	"fmt"
 
 	"github.com/Adirelle/mcvisor/pkg/permissions"
-	"github.com/Adirelle/mcvisor/pkg/utils"
 	"github.com/bwmarrin/discordgo"
 )
 
 type (
 	messageActor struct{ *discordgo.Message }
 
-	AllowUser    utils.Secret
-	AllowRole    utils.Secret
-	AllowChannel utils.Secret
+	AllowedUser    Snowflake
+	AllowedRole    Snowflake
+	AllowedChannel Snowflake
 
 	PermissionItem struct {
-		*AllowUser    `json:"userId" validate:"omitempty,numeric"`
-		*AllowRole    `json:"roleId" validate:"omitempty,numeric"`
-		*AllowChannel `json:"channelId" validate:"omitempty,numeric"`
+		AllowUser    *Snowflake `json:"userId" validate:"omitempty,required_without_all=AllowRole AllowChannel"`
+		AllowRole    *Snowflake `json:"roleId" validate:"omitempty,required_without_all=AllowUser AllowChannel"`
+		AllowChannel *Snowflake `json:"channelId" validate:"omitempty,required_without_all=AllowRole AllowUser"`
 	}
 )
 
@@ -26,50 +25,50 @@ func (a messageActor) DescribeActor() string {
 	return a.Author.Username
 }
 
-func (u AllowUser) Allow(actor permissions.Actor) bool {
+func (u AllowedUser) Allow(actor permissions.Actor) bool {
 	msg, isMessage := actor.(messageActor)
-	return isMessage && msg.Author.ID == string(u)
+	return isMessage && msg.Author.ID == Snowflake(u).String()
 }
 
-func (u AllowUser) DescribePermission() string {
-	return fmt.Sprintf("<@%s>", u)
+func (u AllowedUser) DescribePermission() string {
+	return fmt.Sprintf("<@%s>", Snowflake(u))
 }
 
-func (r AllowRole) Allow(actor permissions.Actor) bool {
+func (r AllowedRole) Allow(actor permissions.Actor) bool {
 	msg, isMessage := actor.(messageActor)
 	if !isMessage || msg.Member == nil {
 		return false
 	}
 	for _, role := range msg.Member.Roles {
-		if role == string(r) {
+		if role == Snowflake(r).String() {
 			return true
 		}
 	}
 	return false
 }
 
-func (r AllowRole) DescribePermission() string {
-	return fmt.Sprintf("<@&%s>", r)
+func (r AllowedRole) DescribePermission() string {
+	return fmt.Sprintf("<@&%s>", Snowflake(r))
 }
 
-func (c AllowChannel) Allow(actor permissions.Actor) bool {
+func (c AllowedChannel) Allow(actor permissions.Actor) bool {
 	msg, isMessage := actor.(messageActor)
-	return isMessage && msg.ChannelID == string(c)
+	return isMessage && msg.ChannelID == Snowflake(c).String()
 }
 
-func (c AllowChannel) DescribePermission() string {
-	return fmt.Sprintf("<#%s>", c)
+func (c AllowedChannel) DescribePermission() string {
+	return fmt.Sprintf("<#%s>", Snowflake(c))
 }
 
 func (i PermissionItem) Permission() permissions.Permission {
 	if i.AllowUser != nil {
-		return *i.AllowUser
+		return AllowedUser(*i.AllowUser)
 	}
 	if i.AllowRole != nil {
-		return *i.AllowRole
+		return AllowedRole(*i.AllowRole)
 	}
 	if i.AllowChannel != nil {
-		return *i.AllowChannel
+		return AllowedChannel(*i.AllowChannel)
 	}
 	panic("empty permission")
 }

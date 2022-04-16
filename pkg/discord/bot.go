@@ -13,7 +13,7 @@ import (
 type (
 	Bot struct {
 		Token         utils.Secret
-		GuildID       utils.Secret
+		GuildID       Snowflake
 		Notifications map[NotificationCategory]NotificationTargets
 		events.Dispatcher
 		*discordgo.Session
