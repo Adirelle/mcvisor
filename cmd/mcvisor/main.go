@@ -36,19 +36,23 @@ func main() {
 	rootSupervisor.Add(commands.EventHandler)
 	rootSupervisor.Add(events.MakeHandler(LogEvent))
 
-	pinger := minecraft.NewPinger(*conf.Minecraft, rootSupervisor.Dispatcher)
-	rootSupervisor.Add(pinger)
-
 	status := minecraft.NewStatusMonitor(rootSupervisor.Dispatcher)
 	rootSupervisor.Add(status)
 
 	bot := discord.NewBot(*conf.Discord, rootSupervisor.Dispatcher)
 	rootSupervisor.Add(bot)
 
-	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
+	serverServices := suture.NewSimple("Server services")
 
 	server := minecraft.NewServer(*conf.Minecraft, rootSupervisor.Dispatcher)
-	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: server, stop: stopSupervisor}
+	serverServices.Add(server)
+
+	pinger := minecraft.NewPinger(*conf.Minecraft, rootSupervisor.Dispatcher)
+	serverServices.Add(pinger)
+	rootSupervisor.Dispatcher.AddHandler(pinger)
+
+	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
+	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: serverServices, stop: stopSupervisor}
 	controller := minecraft.NewController(control)
 	rootSupervisor.Add(controller)
 

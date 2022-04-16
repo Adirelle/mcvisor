@@ -31,6 +31,7 @@ const (
 
 	QueryCategory   Category = "query"
 	ControlCategory Category = "control"
+	ConsoleCategory Category = "console"
 	AdminCategory   Category = "admin"
 
 	anyone anyonePerm = 0

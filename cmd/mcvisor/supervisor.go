@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/thejerf/suture/v4"
@@ -15,7 +16,7 @@ type (
 )
 
 func MakeRootSupervisor() RootSupervisor {
-	supervisor := suture.NewSimple(os.Args[0])
+	supervisor := suture.NewSimple(filepath.Base(os.Args[0]))
 	dispatcher := events.NewAsyncDispatcher()
 	supervisor.Add(dispatcher)
 	return RootSupervisor{supervisor, dispatcher}

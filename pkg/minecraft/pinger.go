@@ -31,7 +31,6 @@ type (
 		events.Dispatcher
 		*pingerSettings
 		events.HandlerBase
-		started bool
 	}
 
 	pingerSettings struct {
@@ -72,7 +71,6 @@ func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
 		Dispatcher:     dispatcher,
 		pingerSettings: new(pingerSettings),
 		HandlerBase:    events.MakeHandlerBase(),
-		started:        false,
 	}
 }
 
@@ -96,15 +94,11 @@ func (p *Pinger) Serve(ctx context.Context) error {
 			p.HandleEvent(ev)
 		case <-ticker.C:
 			p.Ping()
-
 		}
 	}
 }
 
 func (p *Pinger) Ping() {
-	if !p.started {
-		return
-	}
 	var err error
 	if p.queryEnabled {
 		err = p.sendQuery()
@@ -136,10 +130,6 @@ func (p *Pinger) HandleEvent(event events.Event) {
 		if ev.Name == OnlineCommand {
 			p.handleOnlineCommand(ev)
 		}
-	case ServerStarted:
-		p.started = true
-	case ServerStopping, ServerStopped:
-		p.started = false
 	}
 }
 
