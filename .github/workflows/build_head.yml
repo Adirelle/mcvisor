@@ -39,7 +39,7 @@ jobs:
           go-version: "^1.18"
 
       - name: build mcvisor
-        run: go build ./cmd/mcvisor -o "mcvisor_${{ steps.vars.outputs.COMMIT_HASH }}_${{ matrix.goos }}_${{ matrix.goarch }}"
+        run: go build -v -o "mcvisor_${{ steps.vars.outputs.COMMIT_HASH }}_${{ matrix.goos }}_${{ matrix.goarch }}" ./cmd/mcvisor
 
       - name: upload artifacts
         uses: actions/upload-artifact@v2
