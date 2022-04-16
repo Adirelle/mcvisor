@@ -1,0 +1,20 @@
+name: head
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check out sources
+        uses: actions/checkout@v2
+
+      - name: setup go
+        uses: actions/setup-go@v3
+        with:
+          go-version: "^1.18"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.45
