@@ -16,6 +16,7 @@ type (
 		GuildID       Snowflake
 		Notifications map[NotificationCategory]NotificationTargets
 		events.Dispatcher
+		events.HandlerBase
 		*discordgo.Session
 	}
 
@@ -34,6 +35,7 @@ func NewBot(config Config, dispatcher events.Dispatcher) *Bot {
 		GuildID:       config.GuildID,
 		Notifications: config.Notifications,
 		Dispatcher:    dispatcher,
+		HandlerBase:   events.MakeHandlerBase(),
 	}
 }
 
@@ -55,9 +57,7 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 	}
 	defer b.disconnect()
 
-	<-ctx.Done()
-
-	return nil
+	return events.Serve(b.HandlerBase, b.HandleEvent, ctx)
 }
 
 func (b *Bot) HandleEvent(event events.Event) {

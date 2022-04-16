@@ -17,7 +17,7 @@ var (
 	commands          = make(map[Name]Definition, 10)
 	maxCommandNameLen = 0
 
-	EventHandler = events.HandlerFunc(handleCommands)
+	EventHandler = events.MakeHandler(handleCommands)
 )
 
 func RegisterPublic(name Name, description string) {

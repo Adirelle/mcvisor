@@ -14,6 +14,6 @@ type (
 	Type string
 
 	Handler interface {
-		HandleEvent(Event)
+		EventC() chan<- Event
 	}
 )

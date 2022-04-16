@@ -26,8 +26,10 @@ type (
 	}
 )
 
+var DispatchChanCapacity = 20
+
 func NewAsyncDispatcher() *AsyncDispatcher {
-	return &AsyncDispatcher{ctl: make(chan command, 20)}
+	return &AsyncDispatcher{ctl: make(chan command, DispatchChanCapacity)}
 }
 
 func (d *AsyncDispatcher) Serve(ctx context.Context) error {
@@ -59,7 +61,7 @@ func (d *AsyncDispatcher) handleCommand(cmd command) {
 	case dispatchCommand:
 		defer close(c.done)
 		for _, handler := range d.handlers {
-			handler.HandleEvent(c.Event)
+			handler.EventC() <- c.Event
 		}
 
 	}

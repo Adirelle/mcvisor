@@ -1,25 +1,51 @@
 package events
 
-type (
-	HandlerFunc func(Event)
+import (
+	"context"
 
-	HandlerMap map[Type]Handler
+	"github.com/thejerf/suture/v4"
 )
 
-func (f HandlerFunc) HandleEvent(ev Event) {
-	f(ev)
-}
+type (
+	HandlerBase chan Event
 
-func (m HandlerMap) HandleEvent(ev Event) {
-	if h, found := m[ev.Type()]; found {
-		h.HandleEvent(ev)
+	HandlerFunc func(Event)
+
+	FuncHandler struct {
+		HandlerBase
+		handler HandlerFunc
 	}
+)
+
+var HandlerChanCapacity = 50
+
+func MakeHandlerBase() HandlerBase {
+	return HandlerBase(make(chan Event, HandlerChanCapacity))
 }
 
-func MakeOneEventHandler(t Type, h HandlerFunc) HandlerFunc {
-	return func(e Event) {
-		if e.Type() == t {
-			h(e)
+func (b HandlerBase) EventC() chan<- Event {
+	return b
+}
+
+func MakeHandler(handler HandlerFunc) FuncHandler {
+	return FuncHandler{MakeHandlerBase(), handler}
+}
+
+func (f FuncHandler) Serve(ctx context.Context) error {
+	return Serve(f.HandlerBase, f.handler, ctx)
+}
+
+func Serve(events <-chan Event, handler HandlerFunc, ctx context.Context) error {
+	for {
+		select {
+		case event, open := <-events:
+			if open {
+				handler(event)
+			} else {
+				return suture.ErrDoNotRestart
+			}
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }

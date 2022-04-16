@@ -30,6 +30,7 @@ type (
 		propertyPath string
 		events.Dispatcher
 		*pingerSettings
+		events.HandlerBase
 		started bool
 	}
 
@@ -70,6 +71,7 @@ func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
 		propertyPath:   conf.ServerPropertiesPath(),
 		Dispatcher:     dispatcher,
 		pingerSettings: new(pingerSettings),
+		HandlerBase:    events.MakeHandlerBase(),
 		started:        false,
 	}
 }
@@ -87,11 +89,14 @@ func (p *Pinger) Serve(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		p.Ping()
 		select {
 		case <-ctx.Done():
 			return nil
+		case ev := <-p.HandlerBase:
+			p.HandleEvent(ev)
 		case <-ticker.C:
+			p.Ping()
+
 		}
 	}
 }

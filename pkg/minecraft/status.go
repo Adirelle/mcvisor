@@ -17,6 +17,7 @@ type (
 		Status
 		LastUpdate events.Time
 		events.Dispatcher
+		events.HandlerBase
 	}
 
 	StatusChanged struct {
@@ -43,7 +44,7 @@ func init() {
 }
 
 func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {
-	return &StatusMonitor{Dispatcher: dispatcher, Status: Stopped}
+	return &StatusMonitor{Dispatcher: dispatcher, Status: Stopped, HandlerBase: events.MakeHandlerBase()}
 }
 
 func (s *StatusMonitor) GoString() string {
@@ -51,8 +52,7 @@ func (s *StatusMonitor) GoString() string {
 }
 
 func (s *StatusMonitor) Serve(ctx context.Context) error {
-	<-ctx.Done()
-	return nil
+	return events.Serve(s.HandlerBase, s.HandleEvent, ctx)
 }
 
 func (s *StatusMonitor) HandleEvent(ev events.Event) {

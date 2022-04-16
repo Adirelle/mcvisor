@@ -11,8 +11,8 @@ import (
 
 type (
 	Controller struct {
-		ctl Control
-
+		events.HandlerBase
+		ctl    Control
 		status Status
 		target Target
 	}
@@ -53,13 +53,12 @@ func init() {
 }
 
 func NewController(control Control) (c *Controller) {
-	return &Controller{ctl: control, status: Stopped, target: StartTarget}
+	return &Controller{HandlerBase: events.MakeHandlerBase(), ctl: control, status: Stopped, target: StartTarget}
 }
 
 func (c *Controller) Serve(ctx context.Context) error {
 	c.applyTarget()
-	<-ctx.Done()
-	return nil
+	return events.Serve(c.HandlerBase, c.HandleEvent, ctx)
 }
 
 func (c *Controller) SetTarget(target Target) {

@@ -31,33 +31,26 @@ func main() {
 	}
 	conf.Apply()
 
-	rootSupervisor := suture.NewSimple("mcvisor")
+	rootSupervisor := MakeRootSupervisor()
 
-	dispatcher := events.NewAsyncDispatcher()
-	rootSupervisor.Add(dispatcher)
+	rootSupervisor.Add(commands.EventHandler)
+	rootSupervisor.Add(events.MakeHandler(LogEvent))
 
-	dispatcher.AddHandler(commands.EventHandler)
-	dispatcher.AddHandler(events.HandlerFunc(LogEvent))
-
-	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
+	pinger := minecraft.NewPinger(*conf.Minecraft, rootSupervisor.Dispatcher)
 	rootSupervisor.Add(pinger)
-	dispatcher.AddHandler(pinger)
 
-	status := minecraft.NewStatusMonitor(dispatcher)
+	status := minecraft.NewStatusMonitor(rootSupervisor.Dispatcher)
 	rootSupervisor.Add(status)
-	dispatcher.AddHandler(status)
 
-	bot := discord.NewBot(*conf.Discord, dispatcher)
+	bot := discord.NewBot(*conf.Discord, rootSupervisor.Dispatcher)
 	rootSupervisor.Add(bot)
-	dispatcher.AddHandler(bot)
 
 	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
 
-	server := minecraft.NewServer(*conf.Minecraft, dispatcher)
-	control := &serverControl{supervisor: rootSupervisor, server: server, stop: stopSupervisor}
+	server := minecraft.NewServer(*conf.Minecraft, rootSupervisor.Dispatcher)
+	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: server, stop: stopSupervisor}
 	controller := minecraft.NewController(control)
 	rootSupervisor.Add(controller)
-	dispatcher.AddHandler(controller)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
