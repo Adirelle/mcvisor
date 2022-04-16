@@ -1,9 +1,9 @@
 package commands
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/Adirelle/mcvisor/pkg/events"
@@ -24,7 +24,7 @@ type (
 		events.Time
 		permissions.Actor
 		Arguments []string
-		Reply     io.Writer
+		Reply     *bufio.Writer
 	}
 )
 

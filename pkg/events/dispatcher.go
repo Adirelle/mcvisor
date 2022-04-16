@@ -7,7 +7,7 @@ import (
 
 type (
 	Dispatcher interface {
-		DispatchEvent(Event) <-chan struct{}
+		DispatchEvent(Event)
 	}
 
 	AsyncDispatcher struct {
@@ -20,10 +20,7 @@ type (
 	addCommand    struct{ Handler }
 	removeCommand struct{ Handler }
 
-	dispatchCommand struct {
-		Event
-		done chan struct{}
-	}
+	dispatchCommand struct{ Event }
 )
 
 var DispatchChanCapacity = 20
@@ -59,7 +56,6 @@ func (d *AsyncDispatcher) handleCommand(cmd command) {
 			}
 		}
 	case dispatchCommand:
-		defer close(c.done)
 		for _, handler := range d.handlers {
 			handler.EventC() <- c.Event
 		}
@@ -67,10 +63,8 @@ func (d *AsyncDispatcher) handleCommand(cmd command) {
 	}
 }
 
-func (d AsyncDispatcher) DispatchEvent(events Event) <-chan struct{} {
-	done := make(chan struct{})
-	d.ctl <- dispatchCommand{events, done}
-	return done
+func (d AsyncDispatcher) DispatchEvent(events Event) {
+	d.ctl <- dispatchCommand{events}
 }
 
 func (d AsyncDispatcher) HandleEvent(events Event) {

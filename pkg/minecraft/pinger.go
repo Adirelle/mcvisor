@@ -134,6 +134,7 @@ func (p *Pinger) HandleEvent(event events.Event) {
 }
 
 func (p *Pinger) handleOnlineCommand(c commands.Command) {
+	defer c.Reply.Flush()
 	if !p.queryEnabled {
 		_, _ = io.WriteString(c.Reply, "query is disabled on the server")
 		return

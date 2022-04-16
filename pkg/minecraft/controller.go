@@ -100,6 +100,7 @@ func (c *Controller) HandleEvent(event events.Event) {
 			return
 		}
 		_, _ = io.WriteString(command.Reply, "ack")
+		_ = command.Reply.Flush()
 	}
 }
 

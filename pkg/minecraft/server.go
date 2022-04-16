@@ -16,6 +16,7 @@ type (
 	Server struct {
 		Config
 		events.Dispatcher
+		killed bool
 	}
 
 	ServerStarted  struct{ events.Time }
@@ -47,6 +48,7 @@ func (s *Server) GoString() string {
 }
 
 func (s *Server) Serve(ctx context.Context) error {
+	s.killed = false
 	s.DispatchEvent(ServerStarting{events.Now()})
 	proc, err := s.StartServer()
 	if err != nil {
@@ -67,7 +69,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		return fmt.Errorf("error while waiting for process #%d to end: %w", proc.Pid, err)
 	}
 
-	if !state.Success() {
+	if !s.killed && !state.Success() {
 		err = fmt.Errorf("exited: %t, exitCode: %d", state.Exited(), state.ExitCode())
 		s.DispatchEvent(ServerFailure{events.Now(), err})
 	}
@@ -101,10 +103,13 @@ func (s *Server) Wait(ctx context.Context, proc *os.Process) (*os.ProcessState, 
 }
 
 func (s *Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-chan struct{}) {
+	defer log.Printf("stop monitoring server")
 	select {
 	case <-ctl:
 	case <-ctx.Done():
 		s.DispatchEvent(ServerStopping{events.Now()})
+		log.Printf("trying to kill server (%d)", proc.Pid)
+		s.killed = true
 		err := proc.Kill()
 		if err != nil {
 			log.Printf("could not kill process #%d: %s", proc.Pid, err)

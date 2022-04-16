@@ -1,13 +1,20 @@
 package discord
 
 import (
+	"bufio"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/bwmarrin/discordgo"
+)
+
+type (
+	replyWriter struct {
+		session *discordgo.Session
+		message *discordgo.Message
+	}
 )
 
 func (b *Bot) onMessage(session *discordgo.Session, message *discordgo.MessageCreate) {
@@ -19,23 +26,15 @@ func (b *Bot) onMessage(session *discordgo.Session, message *discordgo.MessageCr
 func (b *Bot) handleCommandMessage(session *discordgo.Session, message *discordgo.Message) {
 	var err error
 	var command commands.Command
-	response := &strings.Builder{}
+	replyWriter := replyWriter{session, message}
+	writer := bufio.NewWriter(replyWriter)
 
 	defer func() {
 		if err != nil {
-			fmt.Fprintf(response, "**%s**", err)
+			fmt.Fprintf(writer, "**%s**", err)
 			log.Printf("command: %s> %s: %s", message.Author.Username, message.Content, err)
 		} else {
 			log.Printf("command: %s> %s: success", message.Author.Username, message.Content)
-		}
-		if response.Len() > 0 {
-			_, err = session.ChannelMessageSendComplex(
-				message.ChannelID,
-				&discordgo.MessageSend{Content: response.String(), Reference: message.Reference()},
-			)
-			if err != nil {
-				log.Printf("could not reply to command: %d", err)
-			}
 		}
 	}()
 
@@ -43,12 +42,23 @@ func (b *Bot) handleCommandMessage(session *discordgo.Session, message *discordg
 	if err != nil {
 		return
 	}
-	command.Reply = response
+	command.Reply = writer
 	command.Actor = messageActor{message}
 
 	if command.IsAllowed() {
-		<-b.DispatchEvent(command)
+		b.DispatchEvent(command)
 	} else {
 		err = permissions.ErrPermissionDenied
+	}
+}
+
+func (w replyWriter) Write(data []byte) (int, error) {
+	if msg, err := w.session.ChannelMessageSendComplex(
+		w.message.ChannelID,
+		&discordgo.MessageSend{Content: string(data), Reference: w.message.Reference()},
+	); err == nil {
+		return len(msg.Content), nil
+	} else {
+		return 0, err
 	}
 }
