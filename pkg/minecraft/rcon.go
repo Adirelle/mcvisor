@@ -5,42 +5,39 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Adirelle/mcvisor/pkg/event"
+	"github.com/Adirelle/mcvisor/pkg/events"
 	properties "github.com/dmotylev/goproperties"
 )
 
 type (
 	RemoteConsoleService struct {
 		propertyPath string
-		event.Handler
+		events.Handler
 		*rconSettings
 	}
 
 	rconSettings struct {
-		Enabled bool
-		Port uint16
+		Enabled  bool
+		Port     uint16
 		Password string
 	}
 )
 
-func MakeRemoteConsoleService(conf Config, handler event.Handler) RemoteConsoleService {
+func MakeRemoteConsoleService(conf Config, handler events.Handler) RemoteConsoleService {
 	return RemoteConsoleService{
 		propertyPath: conf.ServerPropertiesPath(),
-		Handler: handler,
+		Handler:      handler,
 		rconSettings: new(rconSettings),
 	}
 }
 
 func (r RemoteConsoleService) Serve(ctx context.Context) error {
-
 	if err := r.readSettings(); err != nil {
 		return err
 	}
 	log.Printf("rcon settings: %#v", r.rconSettings)
 
-
-
-	<- ctx.Done()
+	<-ctx.Done()
 
 	return nil
 }

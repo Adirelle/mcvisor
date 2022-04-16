@@ -1,31 +1,32 @@
 package discord
 
+import (
+	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/permissions"
+	"github.com/Adirelle/mcvisor/pkg/utils"
+)
+
 type (
-	Secret string
+	permissionList []PermissionItem
 
 	Config struct {
-		Token         Secret                                       `json:"token" validate:"required"`
-		GuildID       Secret                                       `json:"serverId" validate:"omitempty,numeric"`
+		Token         utils.Secret                                 `json:"token" validate:"required"`
+		GuildID       utils.Secret                                 `json:"serverId" validate:"omitempty,numeric"`
 		CommandPrefix rune                                         `json:"commandPrefix" validate:"omitempty"`
-		Permissions   PermissionMap                                `json:"permissions,omitempty" validate:"omitempty"`
+		Permissions   map[permissions.Category]permissionList      `json:"permissions,omitempty" validate:"omitempty"`
 		Notifications map[NotificationCategory]NotificationTargets `json:"notifications,omitempty" validate:"omitempty"`
 	}
 )
 
-func (c *Config) ConfigureDefaults() {
-	if c.CommandPrefix == 0 {
-		c.CommandPrefix = '!'
+func (c Config) Apply() {
+	if c.CommandPrefix != 0 {
+		commands.Prefix = c.CommandPrefix
 	}
-}
-
-func (s Secret) Reveal() string {
-	return string(s)
-}
-
-func (Secret) String() string {
-	return "<secret>"
-}
-
-func (Secret) GoString() string {
-	return "<secret>"
+	for cat, list := range c.Permissions {
+		perms := make([]permissions.Permission, len(list))
+		for i, item := range list {
+			perms[i] = item.Permission()
+		}
+		cat.SetPermission(permissions.AnyOf(perms))
+	}
 }

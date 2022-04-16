@@ -5,19 +5,20 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Adirelle/mcvisor/pkg/event"
+	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/bwmarrin/discordgo"
 )
 
 type (
 	Bot struct {
 		Config
-		event.Dispatcher
+		events.Dispatcher
 		*discordgo.Session
 	}
 )
 
-func NewBot(config Config, dispatcher event.Dispatcher) *Bot {
+func NewBot(config Config, dispatcher events.Dispatcher) *Bot {
 	return &Bot{Config: config, Dispatcher: dispatcher}
 }
 
@@ -55,17 +56,18 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 	return nil
 }
 
-func (b *Bot) HandleEvent(ev event.Event) {
-	if n, ok := ev.(Notification); ok {
-		b.handleNotification(n)
+func (b *Bot) HandleEvent(ev events.Event) {
+	if notif, ok := ev.(Notification); ok {
+		b.handleNotification(notif)
 	}
-	if c, ok := ev.(Command); ok {
-		switch c.Name {
-		case HelpCommand:
-			b.handleHelpCommand(c)
-		case PermCommand:
-			b.handlePermCommand(c)
+	if cmd, ok := ev.(commands.Command); ok {
+		switch cmd.Name {
+		case commands.PermCommand:
+			commands.HandlePermCommand(cmd)
+		case commands.HelpCommand:
+			commands.HandleHelpCommand(cmd)
 		default:
+			// NOOP
 		}
 	}
 }

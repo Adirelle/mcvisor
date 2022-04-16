@@ -2,6 +2,8 @@ package discord
 
 import (
 	"log"
+
+	"github.com/Adirelle/mcvisor/pkg/utils"
 )
 
 type (
@@ -12,7 +14,7 @@ type (
 
 	NotificationCategory string
 
-	NotificationTargets []Secret
+	NotificationTargets []utils.Secret
 )
 
 var (

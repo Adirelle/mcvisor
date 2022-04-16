@@ -1,7 +1,8 @@
-package event
+package events
 
 import (
 	"context"
+	"fmt"
 )
 
 type (
@@ -29,7 +30,7 @@ func NewAsyncDispatcher() *AsyncDispatcher {
 	return &AsyncDispatcher{ctl: make(chan command, 5)}
 }
 
-func (d AsyncDispatcher) Serve(ctx context.Context) error {
+func (d *AsyncDispatcher) Serve(ctx context.Context) error {
 	for {
 		select {
 		case cmd := <-d.ctl:
@@ -38,6 +39,10 @@ func (d AsyncDispatcher) Serve(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func (d *AsyncDispatcher) GoString() string {
+	return fmt.Sprintf("Dispatcher(%d, %d/%d)", len(d.handlers), len(d.ctl), cap(d.ctl))
 }
 
 func (d *AsyncDispatcher) handleCommand(cmd command) {
@@ -60,14 +65,14 @@ func (d *AsyncDispatcher) handleCommand(cmd command) {
 	}
 }
 
-func (d AsyncDispatcher) DispatchEvent(event Event) <-chan struct{} {
+func (d AsyncDispatcher) DispatchEvent(events Event) <-chan struct{} {
 	done := make(chan struct{})
-	d.ctl <- dispatchCommand{event, done}
+	d.ctl <- dispatchCommand{events, done}
 	return done
 }
 
-func (d AsyncDispatcher) HandleEvent(event Event) {
-	d.DispatchEvent(event)
+func (d AsyncDispatcher) HandleEvent(events Event) {
+	d.DispatchEvent(events)
 }
 
 func (d AsyncDispatcher) AddHandler(handler Handler) {

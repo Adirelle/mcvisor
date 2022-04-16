@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
-	"github.com/Adirelle/mcvisor/pkg/event"
+	"github.com/Adirelle/mcvisor/pkg/events"
+	"github.com/Adirelle/mcvisor/pkg/permissions"
 )
 
 type (
@@ -13,17 +15,17 @@ type (
 
 	StatusMonitor struct {
 		ServerStatus
-		LastUpdate event.Time
-		event.Dispatcher
+		LastUpdate events.Time
+		events.Dispatcher
 	}
 
 	ServerStatusChangedEvent struct {
-		event.Time
+		events.Time
 		Status ServerStatus
 	}
 )
 
-var ServerStatusChangedType = event.Type("ServerStatusChanged")
+var ServerStatusChangedType = events.Type("ServerStatusChanged")
 
 const (
 	ServerStopped ServerStatus = iota
@@ -33,18 +35,18 @@ const (
 	ServerUnreachable
 	ServerStopping
 
-	StatusCommand string = "status"
+	StatusCommand commands.Name = "status"
 )
 
 func init() {
-	discord.RegisterCommand(discord.CommandDef{
+	commands.Register(commands.Definition{
 		Name:        StatusCommand,
 		Description: "check server status",
-		Permission:  discord.QueryPermissionCategory,
+		Category:    permissions.QueryCategory,
 	})
 }
 
-func NewStatusMonitor(dispatcher event.Dispatcher) *StatusMonitor {
+func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {
 	return &StatusMonitor{Dispatcher: dispatcher, ServerStatus: ServerStopped}
 }
 
@@ -57,8 +59,8 @@ func (s *StatusMonitor) Serve(ctx context.Context) error {
 	return nil
 }
 
-func (s *StatusMonitor) HandleEvent(ev event.Event) {
-	if c, ok := ev.(discord.Command); ok && c.Name == StatusCommand {
+func (s *StatusMonitor) HandleEvent(ev events.Event) {
+	if c, ok := ev.(commands.Command); ok && c.Name == StatusCommand {
 		fmt.Fprintf(c.Reply, "%s since %s", s.ServerStatus, s.LastUpdate.DiscordRelative())
 		return
 	}
@@ -66,12 +68,12 @@ func (s *StatusMonitor) HandleEvent(ev event.Event) {
 	newStatus := s.ServerStatus.resolve(ev)
 	if newStatus != s.ServerStatus {
 		s.ServerStatus = newStatus
-		s.LastUpdate = event.Now()
-		s.DispatchEvent(ServerStatusChangedEvent{event.Time(s.LastUpdate), s.ServerStatus})
+		s.LastUpdate = events.Now()
+		s.DispatchEvent(ServerStatusChangedEvent{events.Time(s.LastUpdate), s.ServerStatus})
 	}
 }
 
-func (s ServerStatus) resolve(ev event.Event) ServerStatus {
+func (s ServerStatus) resolve(ev events.Event) ServerStatus {
 	switch ev.(type) {
 	case ServerStartingEvent:
 		return ServerStarting
@@ -112,7 +114,7 @@ func (s ServerStatus) String() string {
 	}
 }
 
-func (ServerStatusChangedEvent) Type() event.Type {
+func (ServerStatusChangedEvent) Type() events.Type {
 	return ServerStatusChangedType
 }
 

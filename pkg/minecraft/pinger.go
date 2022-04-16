@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Adirelle/mcvisor/pkg/discord"
-	"github.com/Adirelle/mcvisor/pkg/event"
+	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/events"
+	"github.com/Adirelle/mcvisor/pkg/permissions"
 	properties "github.com/dmotylev/goproperties"
 	"github.com/millkhan/mcstatusgo/v2"
 )
@@ -27,7 +28,7 @@ const (
 type (
 	Pinger struct {
 		propertyPath string
-		event.Dispatcher
+		events.Dispatcher
 		*pingerSettings
 	}
 
@@ -39,35 +40,35 @@ type (
 	}
 
 	PingSucceededEvent struct {
-		event.Time
+		events.Time
 	}
 
 	PingFailedEvent struct {
-		event.Time
+		events.Time
 		Reason error
 	}
 )
 
 var (
-	PingSucceededType = event.Type("PingSucceeded")
-	PingFailedType    = event.Type("PingFailed")
+	PingSucceededType = events.Type("PingSucceeded")
+	PingFailedType    = events.Type("PingFailed")
 
 	ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled")
 )
 
 const (
-	OnlineCommand string = "online"
+	OnlineCommand commands.Name = "online"
 )
 
 func init() {
-	discord.RegisterCommand(discord.CommandDef{
+	commands.Register(commands.Definition{
 		Name:        OnlineCommand,
 		Description: "list online players",
-		Permission:  discord.QueryPermissionCategory,
+		Category:    permissions.QueryCategory,
 	})
 }
 
-func NewPinger(conf Config, dispatcher event.Dispatcher) *Pinger {
+func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
 	return &Pinger{
 		propertyPath:   conf.ServerPropertiesPath(),
 		Dispatcher:     dispatcher,
@@ -107,9 +108,9 @@ func (p *Pinger) Ping() {
 		err = ErrBothQueryAndStatusDisabled
 	}
 	if err == nil {
-		p.DispatchEvent(PingSucceededEvent{event.Now()})
+		p.DispatchEvent(PingSucceededEvent{events.Now()})
 	} else {
-		p.DispatchEvent(PingFailedEvent{event.Now(), err})
+		p.DispatchEvent(PingFailedEvent{events.Now(), err})
 	}
 }
 
@@ -123,11 +124,13 @@ func (p *Pinger) getStatus() (err error) {
 	return
 }
 
-func (p *Pinger) HandleEvent(ev event.Event) {
-	c, isCmd := ev.(discord.Command)
-	if !isCmd || c.Name != OnlineCommand {
-		return
+func (p *Pinger) HandleEvent(ev events.Event) {
+	if c, ok := ev.(commands.Command); ok && c.Name == OnlineCommand {
+		p.handleOnlineCommand(c)
 	}
+}
+
+func (p *Pinger) handleOnlineCommand(c commands.Command) {
 	if !p.queryEnabled {
 		io.WriteString(c.Reply, "query is disabled on the server")
 		return
@@ -164,8 +167,8 @@ func (p *Pinger) readSettings() error {
 	return nil
 }
 
-func (PingSucceededEvent) Type() event.Type { return PingSucceededType }
-func (PingSucceededEvent) String() string   { return "ping succeeded" }
+func (PingSucceededEvent) Type() events.Type { return PingSucceededType }
+func (PingSucceededEvent) String() string    { return "ping succeeded" }
 
-func (PingFailedEvent) Type() event.Type { return PingFailedType }
-func (e PingFailedEvent) String() string { return fmt.Sprintf("ping failed: %s", e.Reason) }
+func (PingFailedEvent) Type() events.Type { return PingFailedType }
+func (e PingFailedEvent) String() string  { return fmt.Sprintf("ping failed: %s", e.Reason) }

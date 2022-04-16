@@ -53,9 +53,12 @@ func (c *Config) Load() error {
 	return nil
 }
 
+func (c *Config) Apply() {
+	c.Discord.Apply()
+}
+
 func (c *Config) ConfigureDefaults() {
 	c.Minecraft.ConfigureDefaults()
-	c.Discord.ConfigureDefaults()
 }
 
 func (c *Config) SetBaseDir(baseDir string) {

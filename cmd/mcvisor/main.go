@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
-	"github.com/Adirelle/mcvisor/pkg/event"
+	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/thejerf/suture/v4"
 )
@@ -22,10 +22,10 @@ func main() {
 
 	rootSupervisor := suture.NewSimple("mcvisor")
 
-	dispatcher := event.NewAsyncDispatcher()
+	dispatcher := events.NewAsyncDispatcher()
 	rootSupervisor.Add(dispatcher)
 
-	dispatcher.AddHandler(event.HandlerFunc(func(ev event.Event) {
+	dispatcher.AddHandler(events.HandlerFunc(func(ev events.Event) {
 		log.Printf("[%s]: %s", ev.Type(), ev)
 	}))
 

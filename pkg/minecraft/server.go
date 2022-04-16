@@ -9,21 +9,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Adirelle/mcvisor/pkg/event"
+	"github.com/Adirelle/mcvisor/pkg/events"
 )
 
 type (
 	Server struct {
 		Config
-		event.Dispatcher
+		events.Dispatcher
 	}
 
-	ServerStartedEvent  struct{ event.Time }
-	ServerStartingEvent struct{ event.Time }
-	ServerStoppedEvent  struct{ event.Time }
-	ServerStoppingEvent struct{ event.Time }
+	ServerStartedEvent  struct{ events.Time }
+	ServerStartingEvent struct{ events.Time }
+	ServerStoppedEvent  struct{ events.Time }
+	ServerStoppingEvent struct{ events.Time }
 	ServerFailureEvent  struct {
-		event.Time
+		events.Time
 		Reason error
 	}
 )
@@ -31,14 +31,14 @@ type (
 const ServerStoppingDelay = 10 * time.Second
 
 var (
-	ServerStartedType  event.Type = "ServerStarted"
-	ServerStartingType event.Type = "ServerStarting"
-	ServerStoppedType  event.Type = "ServerStopped"
-	ServerStoppingType event.Type = "ServerStopping"
-	ServerFailureType  event.Type = "ServerFailure"
+	ServerStartedType  events.Type = "ServerStarted"
+	ServerStartingType events.Type = "ServerStarting"
+	ServerStoppedType  events.Type = "ServerStopped"
+	ServerStoppingType events.Type = "ServerStopping"
+	ServerFailureType  events.Type = "ServerFailure"
 )
 
-func NewServer(conf Config, dispatcher event.Dispatcher) *Server {
+func NewServer(conf Config, dispatcher events.Dispatcher) *Server {
 	return &Server{Config: conf, Dispatcher: dispatcher}
 }
 
@@ -47,15 +47,15 @@ func (s *Server) GoString() string {
 }
 
 func (s *Server) Serve(ctx context.Context) error {
-	s.DispatchEvent(ServerStartingEvent{event.Now()})
+	s.DispatchEvent(ServerStartingEvent{events.Now()})
 	proc, err := s.StartServer()
 	if err != nil {
-		s.DispatchEvent(ServerFailureEvent{event.Now(), err})
+		s.DispatchEvent(ServerFailureEvent{events.Now(), err})
 		return err
 	}
-	s.DispatchEvent(ServerStartedEvent{event.Now()})
+	s.DispatchEvent(ServerStartedEvent{events.Now()})
 	defer func() {
-		s.DispatchEvent(ServerStoppedEvent{event.Now()})
+		s.DispatchEvent(ServerStoppedEvent{events.Now()})
 	}()
 
 	if err := s.WritePid(s.PidFile, proc.Pid); err != nil {
@@ -69,7 +69,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	if !state.Success() {
 		err = fmt.Errorf("exited: %t, exitCode: %d", state.Exited(), state.ExitCode())
-		s.DispatchEvent(ServerFailureEvent{event.Now(), err})
+		s.DispatchEvent(ServerFailureEvent{events.Now(), err})
 	}
 
 	return nil
@@ -104,7 +104,7 @@ func (s *Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-
 	select {
 	case <-ctl:
 	case <-ctx.Done():
-		s.DispatchEvent(ServerStoppingEvent{event.Now()})
+		s.DispatchEvent(ServerStoppingEvent{events.Now()})
 		err := proc.Kill()
 		if err != nil {
 			log.Printf("could not kill process #%d: %s", proc.Pid, err)
@@ -126,17 +126,17 @@ func (s *Server) WritePid(pidFile string, pid int) error {
 	return writer.Close()
 }
 
-func (ServerStartingEvent) String() string   { return "server starting" }
-func (ServerStartingEvent) Type() event.Type { return ServerStartingType }
+func (ServerStartingEvent) String() string    { return "server starting" }
+func (ServerStartingEvent) Type() events.Type { return ServerStartingType }
 
-func (ServerStartedEvent) String() string   { return "server started" }
-func (ServerStartedEvent) Type() event.Type { return ServerStartedType }
+func (ServerStartedEvent) String() string    { return "server started" }
+func (ServerStartedEvent) Type() events.Type { return ServerStartedType }
 
-func (ServerStoppingEvent) String() string   { return "server stopping" }
-func (ServerStoppingEvent) Type() event.Type { return ServerStoppingType }
+func (ServerStoppingEvent) String() string    { return "server stopping" }
+func (ServerStoppingEvent) Type() events.Type { return ServerStoppingType }
 
-func (ServerStoppedEvent) String() string   { return "server stopped" }
-func (ServerStoppedEvent) Type() event.Type { return ServerStoppedType }
+func (ServerStoppedEvent) String() string    { return "server stopped" }
+func (ServerStoppedEvent) Type() events.Type { return ServerStoppedType }
 
-func (e ServerFailureEvent) String() string { return fmt.Sprintf("server failure: %s", e.Reason) }
-func (ServerFailureEvent) Type() event.Type { return ServerFailureType }
+func (e ServerFailureEvent) String() string  { return fmt.Sprintf("server failure: %s", e.Reason) }
+func (ServerFailureEvent) Type() events.Type { return ServerFailureType }
