@@ -10,7 +10,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func (b *Bot) handleMessage(session *discordgo.Session, message *discordgo.MessageCreate) {
+func (b *Bot) onMessage(session *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Author.ID != b.State.User.ID && len(message.Content) > 1 {
 		go b.handleCommandMessage(session, message.Message)
 	}

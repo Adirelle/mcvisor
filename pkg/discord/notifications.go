@@ -17,7 +17,7 @@ type (
 	NotificationTargets []utils.Secret
 )
 
-var (
+const (
 	IgnoredCategory NotificationCategory = ""
 	StatusCategory  NotificationCategory = "status"
 )

@@ -16,9 +16,9 @@ type (
 	AllowChannel utils.Secret
 
 	PermissionItem struct {
-		*AllowUser    `json:"roleId" validate:"omitempty,numeric"`
-		*AllowRole    `json:"channelId" validate:"omitempty,numeric"`
-		*AllowChannel `json:"userId" validate:"omitempty,numeric"`
+		*AllowUser    `json:"userId" validate:"omitempty,numeric"`
+		*AllowRole    `json:"roleId" validate:"omitempty,numeric"`
+		*AllowChannel `json:"channelId" validate:"omitempty,numeric"`
 	}
 )
 

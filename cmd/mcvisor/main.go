@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
@@ -19,11 +20,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	conf.Apply()
 
 	rootSupervisor := suture.NewSimple("mcvisor")
 
 	dispatcher := events.NewAsyncDispatcher()
 	rootSupervisor.Add(dispatcher)
+
+	dispatcher.AddHandler(commands.EventHandler)
 
 	dispatcher.AddHandler(events.HandlerFunc(func(ev events.Event) {
 		log.Printf("[%s]: %s", ev.Type(), ev)

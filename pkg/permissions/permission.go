@@ -23,7 +23,7 @@ type (
 
 	AnyOf []Permission
 
-	allowAll int
+	anyonePerm int
 )
 
 const (
@@ -32,12 +32,14 @@ const (
 	QueryCategory   Category = "query"
 	ControlCategory Category = "control"
 	AdminCategory   Category = "admin"
+
+	anyone anyonePerm = 0
 )
 
 var (
 	ErrPermissionDenied = errors.New("permission denied")
 
-	permissions = make(map[Category]Permission)
+	permissions = map[Category]Permission{}
 )
 
 func (c Category) PermissionCategory() Category {
@@ -55,7 +57,7 @@ func (c Category) Permission() Permission {
 	if perm, found := permissions[c]; found {
 		return perm
 	}
-	return allowAll(0)
+	return anyone
 }
 
 func (c Category) Allow(actor Actor) bool {
@@ -79,12 +81,12 @@ func (a AnyOf) DescribePermission() string {
 	b := strings.Builder{}
 	for i, item := range a {
 		if i > 0 {
-			b.WriteString(", ")
+			b.WriteString("|")
 		}
 		b.WriteString(item.DescribePermission())
 	}
 	return b.String()
 }
 
-func (allowAll) Allow(Actor) bool           { return true }
-func (allowAll) DescribePermission() string { return "anyone" }
+func (anyonePerm) Allow(Actor) bool           { return true }
+func (anyonePerm) DescribePermission() string { return "anyone" }

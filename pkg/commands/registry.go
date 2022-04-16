@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
 )
 
@@ -15,6 +16,8 @@ const (
 var (
 	commands          = make(map[Name]Definition, 10)
 	maxCommandNameLen = 0
+
+	EventHandler = events.HandlerFunc(handleCommands)
 )
 
 func Register(def Definition) {
@@ -27,6 +30,19 @@ func Register(def Definition) {
 func init() {
 	Register(Definition{HelpCommand, "list all commands", permissions.Anyone})
 	Register(Definition{PermCommand, "show current command permissions", permissions.AdminCategory})
+}
+
+func handleCommands(event events.Event) {
+	if cmd, ok := event.(Command); ok {
+		switch cmd.Name {
+		case PermCommand:
+			HandlePermCommand(cmd)
+		case HelpCommand:
+			HandleHelpCommand(cmd)
+		default:
+			// NOOP
+		}
+	}
 }
 
 func HandleHelpCommand(cmd Command) {
