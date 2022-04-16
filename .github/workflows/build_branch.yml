@@ -1,4 +1,4 @@
-name: Building head
+name: Build branch
 
 on:
   push:
