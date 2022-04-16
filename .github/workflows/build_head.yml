@@ -25,6 +25,8 @@ jobs:
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
+      COMMIT_HASH_test: ${GITHUB_SHA:0:7}
+      OUTPUT_test: "mcvisor_${{ steps.vars.outputs.COMMIT_HASH }}_${{ matrix.goos }}_${{ matrix.goarch }}$(go env GOEXE)"
     steps:
       - name: Fetch commit hash
         id: vars
@@ -40,7 +42,12 @@ jobs:
           go-version: "^1.18"
 
       - name: Build
-        run: go build -v -o "mcvisor_${{ steps.vars.outputs.COMMIT_HASH }}_${{ matrix.goos }}_${{ matrix.goarch }}$(go env GOEXE)" ./cmd/mcvisor
+        env:
+          OUTPUT: "mcvisor_${{ steps.vars.outputs.COMMIT_HASH }}_${{ matrix.goos }}_${{ matrix.goarch }}$(go env GOEXE)"
+        run: |
+          printenv | grep test
+          go build -v -o "$OUTPUT" ./cmd/mcvisor
+          sha512sum "$OUTPUT" > "${OUTPUT}.sha512"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
