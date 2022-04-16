@@ -122,8 +122,9 @@ func (s *Server) WritePid(pidFile string, pid int) error {
 	if err != nil {
 		return err
 	}
-	writer.WriteString(strconv.Itoa(pid))
-	return writer.Close()
+	_, err = writer.WriteString(strconv.Itoa(pid))
+	writer.Close()
+	return err
 }
 
 func (ServerStartingEvent) String() string    { return "server starting" }

@@ -132,7 +132,7 @@ func (p *Pinger) HandleEvent(ev events.Event) {
 
 func (p *Pinger) handleOnlineCommand(c commands.Command) {
 	if !p.queryEnabled {
-		io.WriteString(c.Reply, "query is disabled on the server")
+		_, _ = io.WriteString(c.Reply, "query is disabled on the server")
 		return
 	}
 	response, err := mcstatusgo.FullQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout)
@@ -149,9 +149,9 @@ func (p *Pinger) handleOnlineCommand(c commands.Command) {
 
 	log.Printf("could not query server: %s", err)
 	if netErr, isNetError := err.(net.Error); isNetError && netErr.Timeout() {
-		io.WriteString(c.Reply, "could not contact server")
+		_, _ = io.WriteString(c.Reply, "could not contact server")
 	} else {
-		io.WriteString(c.Reply, "internal error")
+		_, _ = io.WriteString(c.Reply, "internal error")
 	}
 }
 
