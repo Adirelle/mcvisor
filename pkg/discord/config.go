@@ -1,8 +1,6 @@
 package discord
 
 import (
-	"log"
-
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/Adirelle/mcvisor/pkg/utils"
@@ -30,6 +28,5 @@ func (c Config) Apply() {
 			perms[i] = item.Permission()
 		}
 		cat.SetPermission(permissions.AnyOf(perms))
-		log.Printf("perm: %s: %s", cat, cat.DescribePermission())
 	}
 }

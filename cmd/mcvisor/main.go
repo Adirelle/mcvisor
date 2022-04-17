@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
-	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
+	"github.com/apex/log"
+	"github.com/apex/log/handlers/cli"
 	"github.com/thejerf/suture/v4"
 )
 
@@ -23,18 +23,23 @@ type (
 	}
 )
 
+var cliLogHandler = cli.New(os.Stderr)
+
+func init() {
+	log.SetHandler(cliLogHandler)
+	log.SetLevel(log.InfoLevel)
+}
+
 func main() {
 	conf := NewConfig()
 	err := conf.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.WithError(err).Fatal("could not load configuration")
 	}
 	conf.Apply()
 
 	rootSupervisor := MakeRootSupervisor()
-
 	rootSupervisor.Add(commands.EventHandler)
-	rootSupervisor.Add(events.MakeHandler(LogEvent))
 
 	status := minecraft.NewStatusMonitor(rootSupervisor.Dispatcher)
 	rootSupervisor.Add(status)
@@ -59,18 +64,16 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-signals
-		controller.SetTarget(minecraft.ShutdownTarget)
+		for signal := range signals {
+			log.WithField("signal", signal).Info("signal.received")
+			controller.SetTarget(minecraft.ShutdownTarget)
+		}
 	}()
 
 	err = rootSupervisor.Serve(supervisorCtx)
 	if err != nil && err != context.Canceled {
-		log.Fatalf("exit reason: %s", err)
+		log.WithError(err).Fatal("exit")
 	}
-}
-
-func LogEvent(ev events.Event) {
-	log.Printf("[%s]: %s", ev.Type(), ev)
 }
 
 func (c *serverControl) Start() {
@@ -87,7 +90,7 @@ func (c *serverControl) Stop() {
 	}
 	err := c.supervisor.RemoveAndWait(*c.token, 0)
 	if err != nil {
-		log.Printf("error stopping server: %s", err)
+		log.WithError(err).Error("stopping server")
 	}
 	c.token = nil
 }

@@ -3,10 +3,10 @@ package discord
 import (
 	"bufio"
 	"fmt"
-	"log"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
+	"github.com/apex/log"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -24,32 +24,39 @@ func (b *Bot) onMessage(session *discordgo.Session, message *discordgo.MessageCr
 }
 
 func (b *Bot) handleCommandMessage(session *discordgo.Session, message *discordgo.Message) {
-	var err error
-	var command commands.Command
 	replyWriter := replyWriter{session, message}
 	writer := bufio.NewWriter(replyWriter)
 
-	defer func() {
-		if err != nil {
-			fmt.Fprintf(writer, "**%s**", err)
-			log.Printf("command: %s> %s: %s", message.Author.Username, message.Content, err)
-		} else {
-			log.Printf("command: %s> %s: success", message.Author.Username, message.Content)
-		}
-	}()
+	logger := log.
+		WithField("username", message.Author.Username).
+		WithField("channelID", message.ChannelID).
+		WithField("roles", message.Member.Roles).
+		WithField("message", message.Content)
 
-	command, err = commands.Parse(message.Content)
+	err := b.execCommand(session, message, writer, logger)
 	if err != nil {
-		return
+		fmt.Fprintf(writer, "**%s**", err)
+		_ = writer.Flush()
+		logger.WithError(err).Error("command.rejected")
+	} else {
+		logger.Info("command.dispatched")
+	}
+}
+
+func (b *Bot) execCommand(session *discordgo.Session, message *discordgo.Message, writer *bufio.Writer, logger *log.Entry) error {
+	command, err := commands.Parse(message.Content)
+	if err != nil {
+		return err
 	}
 	command.Reply = writer
 	command.Actor = messageActor{message}
 
-	if command.IsAllowed() {
-		b.DispatchEvent(command)
-	} else {
-		err = permissions.ErrPermissionDenied
+	if !command.IsAllowed() {
+		return permissions.ErrPermissionDenied
 	}
+
+	b.DispatchEvent(command)
+	return nil
 }
 
 func (w replyWriter) Write(data []byte) (int, error) {
@@ -57,8 +64,11 @@ func (w replyWriter) Write(data []byte) (int, error) {
 		w.message.ChannelID,
 		&discordgo.MessageSend{Content: string(data), Reference: w.message.Reference()},
 	); err == nil {
+		n := len(msg.Content)
+		log.WithField("size", n).Debug("command.reply.sent")
 		return len(msg.Content), nil
 	} else {
+		log.WithError(err).Warn("command.reply.error")
 		return 0, err
 	}
 }

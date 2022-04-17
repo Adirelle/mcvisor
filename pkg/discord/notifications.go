@@ -1,8 +1,6 @@
 package discord
 
-import (
-	"log"
-)
+import "github.com/apex/log"
 
 type (
 	Notification interface {
@@ -30,11 +28,13 @@ func (b *Bot) handleNotification(n Notification) {
 		return
 	}
 	msg := n.Message()
+	logger := log.WithFields(log.Fields{"message": msg, "category": cat})
+	logger.Debug("discord.notification.sending")
 	for _, target := range targets {
 		channelID := string(target)
 		_, err := b.ChannelMessageSend(channelID, msg)
 		if err != nil {
-			log.Printf("could not notify channel %s: %s", channelID, err)
+			logger.WithField("channel", channelID).WithError(err).Error("discord.notification.error")
 		}
 	}
 }

@@ -3,6 +3,8 @@ package events
 import (
 	"fmt"
 	"time"
+
+	"github.com/apex/log"
 )
 
 type Time time.Time
@@ -13,6 +15,10 @@ func Now() Time {
 
 func (t Time) When() Time {
 	return t
+}
+
+func (t Time) Fields() log.Fields {
+	return nil
 }
 
 func (t Time) String() string {

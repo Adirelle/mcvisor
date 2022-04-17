@@ -3,6 +3,8 @@ package permissions
 import (
 	"errors"
 	"strings"
+
+	"github.com/apex/log"
 )
 
 type (
@@ -52,6 +54,7 @@ func (c Category) SetPermission(permission Permission) {
 		return
 	}
 	permissions[c] = permission
+	log.WithField("category", c).WithField("permission", permission).Debug("permissions.setup")
 }
 
 func (c Category) Permission() Permission {

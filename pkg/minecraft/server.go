@@ -3,40 +3,33 @@ package minecraft
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/events"
+	"github.com/apex/log"
 )
 
 type (
 	Server struct {
 		Config
 		events.Dispatcher
-		killed bool
 	}
 
 	ServerStarted  struct{ events.Time }
 	ServerStarting struct{ events.Time }
 	ServerStopped  struct{ events.Time }
 	ServerStopping struct{ events.Time }
-	ServerFailure  struct {
-		events.Time
-		Reason error
-	}
 )
 
-const ServerStoppingDelay = 10 * time.Second
+const ServerStopTimeout = 10 * time.Second
 
 var (
-	ServerStartedType  events.Type = "ServerStarted"
-	ServerStartingType events.Type = "ServerStarting"
-	ServerStoppedType  events.Type = "ServerStopped"
-	ServerStoppingType events.Type = "ServerStopping"
-	ServerFailureType  events.Type = "ServerFailure"
+	ServerStartedType  events.Type = "server.started"
+	ServerStartingType events.Type = "server.starting"
+	ServerStoppedType  events.Type = "server.stopped"
+	ServerStoppingType events.Type = "server.stopping"
 )
 
 func NewServer(conf Config, dispatcher events.Dispatcher) *Server {
@@ -48,78 +41,69 @@ func (s *Server) GoString() string {
 }
 
 func (s *Server) Serve(ctx context.Context) error {
-	s.killed = false
 	s.DispatchEvent(ServerStarting{events.Now()})
 	proc, err := s.StartServer()
 	if err != nil {
-		s.DispatchEvent(ServerFailure{events.Now(), err})
 		return err
 	}
+	logger := log.WithField("pid", proc.Pid)
+	ctx = log.NewContext(ctx, logger)
+
 	s.DispatchEvent(ServerStarted{events.Now()})
 	defer func() {
 		s.DispatchEvent(ServerStopped{events.Now()})
 	}()
 
-	if err := s.WritePid(s.PidFile, proc.Pid); err != nil {
-		log.Printf("could not write pid into `%s`: %s", s.PidFile, err)
+	if err := s.WritePid(s.PidFile, proc.Pid); err == nil {
+		defer os.Remove(s.PidFile)
+	} else {
+		logger.WithError(err).WithField("path", s.PidFile).Warn("server.pidFile.error")
 	}
 
-	state, err := s.Wait(ctx, proc)
-	if err != nil {
-		return fmt.Errorf("error while waiting for process #%d to end: %w", proc.Pid, err)
-	}
+	killCtx, cancelKill := context.WithCancel(ctx)
 
-	if !s.killed && !state.Success() {
-		err = fmt.Errorf("exited: %t, exitCode: %d", state.Exited(), state.ExitCode())
-		s.DispatchEvent(ServerFailure{events.Now(), err})
-	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			logger.Debug("serker.kill")
+			s.DispatchEvent(ServerStopping{events.Now()})
+			err := proc.Kill()
+			if err != nil {
+				logger.WithError(err).Error("server.kill.error")
+			}
+		case <-killCtx.Done():
+		}
+	}()
 
-	return nil
+	state, err := proc.Wait()
+	cancelKill()
+
+	logger.WithError(err).WithFields(log.Fields{
+		"success":  state.Success(),
+		"exited":   state.Exited(),
+		"exitCode": state.ExitCode(),
+	}).Info("server.stopped")
+
+	return err
 }
 
 func (s *Server) StartServer() (proc *os.Process, err error) {
 	cmdLine := s.CmdLine()
-
 	attr := os.ProcAttr{
 		Dir:   s.WorkingDir,
 		Env:   s.Env(),
 		Files: []*os.File{nil, nil, os.Stderr},
 	}
 
+	logger := log.WithField("commandLine", cmdLine)
+	logger.Debug("server.start")
 	proc, err = os.StartProcess(cmdLine[0], cmdLine, &attr)
-	if err != nil {
-		cmdLine := strings.Join(cmdLine, " ")
-		err = fmt.Errorf("could not start `%s`: %w", cmdLine, err)
+	if err == nil {
+		logger.Info("server.started")
+	} else {
+		logger.WithError(err).Error("server.start.error")
 	}
-
 	return
-}
-
-func (s *Server) Wait(ctx context.Context, proc *os.Process) (*os.ProcessState, error) {
-	ctl := make(chan struct{})
-	defer close(ctl)
-	go s.KillOnContextDone(ctx, proc, ctl)
-	return proc.Wait()
-}
-
-func (s *Server) KillOnContextDone(ctx context.Context, proc *os.Process, ctl <-chan struct{}) {
-	defer log.Printf("stop monitoring server")
-	select {
-	case <-ctl:
-	case <-ctx.Done():
-		s.DispatchEvent(ServerStopping{events.Now()})
-		log.Printf("trying to kill server (%d)", proc.Pid)
-		s.killed = true
-		err := proc.Kill()
-		if err != nil {
-			log.Printf("could not kill process #%d: %s", proc.Pid, err)
-		}
-		select {
-		case <-ctl:
-		case <-time.After(ServerStoppingDelay):
-			log.Printf("server still alive after %s", ServerStoppingDelay.String())
-		}
-	}
 }
 
 func (s *Server) WritePid(pidFile string, pid int) error {
@@ -143,6 +127,3 @@ func (ServerStopping) Type() events.Type { return ServerStoppingType }
 
 func (ServerStopped) String() string    { return "server stopped" }
 func (ServerStopped) Type() events.Type { return ServerStoppedType }
-
-func (e ServerFailure) String() string  { return fmt.Sprintf("server failure: %s", e.Reason) }
-func (ServerFailure) Type() events.Type { return ServerFailureType }

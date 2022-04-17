@@ -2,6 +2,8 @@ package events
 
 import (
 	"fmt"
+
+	"github.com/apex/log"
 )
 
 type (
@@ -9,6 +11,7 @@ type (
 		fmt.Stringer
 		Type() Type
 		When() Time
+		log.Fielder
 	}
 
 	Type string

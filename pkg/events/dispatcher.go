@@ -3,6 +3,10 @@ package events
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
+	"github.com/apex/log"
 )
 
 type (
@@ -20,7 +24,10 @@ type (
 	addCommand    struct{ Handler }
 	removeCommand struct{ Handler }
 
-	dispatchCommand struct{ Event }
+	dispatchCommand struct {
+		Event
+		done chan struct{}
+	}
 )
 
 var DispatchChanCapacity = 20
@@ -33,7 +40,7 @@ func (d *AsyncDispatcher) Serve(ctx context.Context) error {
 	for {
 		select {
 		case cmd := <-d.ctl:
-			d.handleCommand(cmd)
+			d.handleCommand(cmd, ctx)
 		case <-ctx.Done():
 			return nil
 		}
@@ -44,7 +51,7 @@ func (d *AsyncDispatcher) GoString() string {
 	return fmt.Sprintf("Dispatcher(%d, %d/%d)", len(d.handlers), len(d.ctl), cap(d.ctl))
 }
 
-func (d *AsyncDispatcher) handleCommand(cmd command) {
+func (d *AsyncDispatcher) handleCommand(cmd command, ctx context.Context) {
 	switch c := cmd.(type) {
 	case addCommand:
 		d.handlers = append(d.handlers, c.Handler)
@@ -56,15 +63,30 @@ func (d *AsyncDispatcher) handleCommand(cmd command) {
 			}
 		}
 	case dispatchCommand:
+		dispatchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		defer close(c.done)
+		log.WithFields(c.Event).Debugf("event.dispatch.%s", c.Event.Type())
+		all := &sync.WaitGroup{}
 		for _, handler := range d.handlers {
-			handler.EventC() <- c.Event
+			all.Add(1)
+			go func(handler Handler) {
+				defer all.Done()
+				select {
+				case handler.EventC() <- c.Event:
+				case <-dispatchCtx.Done():
+					log.WithField("handler", handler).WithField("event", c.Event).Error("event.dispatch.dropped")
+				}
+			}(handler)
 		}
-
+		all.Wait()
 	}
 }
 
 func (d AsyncDispatcher) DispatchEvent(events Event) {
-	d.ctl <- dispatchCommand{events}
+	done := make(chan struct{})
+	d.ctl <- dispatchCommand{events, done}
+	<-done
 }
 
 func (d AsyncDispatcher) HandleEvent(events Event) {

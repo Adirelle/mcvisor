@@ -8,6 +8,7 @@ import (
 
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
+	"github.com/apex/log"
 )
 
 type (
@@ -28,13 +29,15 @@ type (
 	}
 )
 
-const CommandType events.Type = "Command"
+const CommandType events.Type = "command"
 
 var (
 	Prefix rune = '!'
 
 	ErrNoCommandPrefix = errors.New("missing command prefix")
 	ErrUnknownCommand  = errors.New("unknown command")
+
+	_ events.Event = Command{}
 )
 
 func (n Name) String() string {
@@ -51,6 +54,14 @@ func (c Command) String() string {
 
 func (c Command) IsAllowed() bool {
 	return c.Permission().Allow(c.Actor)
+}
+
+func (c Command) Fields() log.Fields {
+	return map[string]interface{}{
+		"command": c.Name,
+		"args":    c.Arguments,
+		"actor":   c.Actor.DescribeActor(),
+	}
 }
 
 func Parse(line string) (cmd Command, err error) {

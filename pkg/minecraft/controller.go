@@ -3,11 +3,11 @@ package minecraft
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
+	"github.com/apex/log"
 )
 
 type (
@@ -47,7 +47,7 @@ const (
 	RestartCommand  commands.Name = "restart"
 	ShutdownCommand commands.Name = "shutdown"
 
-	TargetChangedType events.Type = "TargetChanged"
+	TargetChangedType events.Type = "controller.target.changed"
 
 	StartTarget    startTarget    = 0
 	StopTarget     stopTarget     = 1
@@ -63,19 +63,26 @@ func init() {
 }
 
 func NewController(control Control, dispatcher events.Dispatcher) (c *Controller) {
-	return &Controller{HandlerBase: events.MakeHandlerBase(), Dispatcher: dispatcher, ctl: control, status: Stopped, target: StartTarget}
+	return &Controller{
+		HandlerBase: events.MakeHandlerBase(),
+		Dispatcher:  dispatcher,
+		ctl:         control,
+		status:      Stopped,
+		target:      StartTarget,
+	}
 }
 
 func (c *Controller) Serve(ctx context.Context) error {
-	c.applyTarget()
+	c.iterate()
 	return events.Serve(c.HandlerBase, c.HandleEvent, ctx)
 }
 
 func (c *Controller) SetTarget(target Target) {
 	if c.target != target {
+		log.WithField("old", c.target).WithField("new", target).Info("controller.target.change")
 		c.target = target
 		c.DispatchEvent(TargetChanged{events.Now(), target})
-		c.applyTarget()
+		c.iterate()
 	}
 }
 
@@ -83,7 +90,7 @@ func (c *Controller) HandleEvent(event events.Event) {
 	if statusChanged, ok := event.(StatusChanged); ok {
 		if statusChanged.Status != c.status {
 			c.status = statusChanged.Status
-			c.applyTarget()
+			c.iterate()
 		}
 	}
 	if command, ok := event.(commands.Command); ok {
@@ -99,17 +106,22 @@ func (c *Controller) HandleEvent(event events.Event) {
 		default:
 			return
 		}
-		_, _ = io.WriteString(command.Reply, "ack")
-		_ = command.Reply.Flush()
 	}
 }
 
-func (c *Controller) applyTarget() {
-	c.SetTarget(c.target.apply(c.status, c.ctl))
+func (c *Controller) iterate() {
+	newTarget := c.target.apply(c.status, c.ctl)
+	log.WithFields(log.Fields{
+		"status":     c.status,
+		"target.old": c.target,
+		"target.new": newTarget,
+	}).Debug("controller.iterate")
+	c.SetTarget(newTarget)
 }
 
-func (t TargetChanged) Type() events.Type { return TargetChangedType }
-func (t TargetChanged) String() string    { return t.Target.String() }
+func (t TargetChanged) Type() events.Type  { return TargetChangedType }
+func (t TargetChanged) String() string     { return t.Target.String() }
+func (t TargetChanged) Fields() log.Fields { return log.Fields{"target": t.Target} }
 
 func (startTarget) String() string { return "start" }
 

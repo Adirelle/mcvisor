@@ -8,6 +8,7 @@ import (
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
+	"github.com/apex/log"
 )
 
 type (
@@ -26,7 +27,7 @@ type (
 	}
 )
 
-var StatusChangedType = events.Type("StatusChanged")
+var StatusChangedType = events.Type("server.status.changed")
 
 const (
 	Stopped Status = iota
@@ -63,6 +64,11 @@ func (s *StatusMonitor) HandleEvent(ev events.Event) {
 	}
 
 	newStatus := s.Status.resolve(ev)
+	log.WithFields(log.Fields{
+		"event":     ev.Type(),
+		"oldStatus": s.Status,
+		"newStatus": newStatus,
+	}).Debug("server.status.iterate")
 	if newStatus != s.Status {
 		s.Status = newStatus
 		s.LastUpdate = events.Now()

@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
+	"github.com/apex/log"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -66,11 +66,11 @@ func (c *Config) SetBaseDir(baseDir string) {
 }
 
 func (c *Config) ReadFrom(path string) error {
-	log.Printf("reading configuration from %s", path)
+	log.WithField("path", path).Debug("config")
 	var file *os.File
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
-		log.Printf("configuration file %s does not exist", path)
+		log.WithField("path", path).WithError(err).Error("config")
 		c.ConfigureDefaults()
 		return c.WriteTo(path)
 	} else if err != nil {
