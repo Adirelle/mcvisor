@@ -167,6 +167,15 @@ func (p nullPinger) Ping(_ time.Time) PingerEvent {
 	return PingDisabled(p)
 }
 
+func (p *PingSucceeded) Fields() log.Fields {
+	return log.Fields{
+		"latency":        p.Latency,
+		"players.online": p.OnlinePlayers,
+		"players.max":    p.MaxPlayers,
+		"players.list":   p.PlayerList,
+	}
+}
+
 func (p *PingSucceeded) writeReport(writer io.Writer) error {
 	_, _ = fmt.Fprintf(writer, "Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
 	if len(p.PlayerList) > 0 {
@@ -177,9 +186,17 @@ func (p *PingSucceeded) writeReport(writer io.Writer) error {
 	return nil
 }
 
+func (p *PingFailed) Fields() log.Fields {
+	return log.Fields{"error": p.Reason}
+}
+
 func (p *PingFailed) writeReport(writer io.Writer) (err error) {
 	_, err = io.WriteString(writer, "**last ping failed**")
 	return
+}
+
+func (PingDisabled) Fields() log.Fields {
+	return nil
 }
 
 func (PingDisabled) writeReport(writer io.Writer) (err error) {

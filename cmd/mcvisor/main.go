@@ -62,10 +62,11 @@ func main() {
 	go func() {
 		sig := <-signals
 		signal.Stop(signals)
-		log.WithField("signal", sig).Info("shutting down on signal")
+		logger := log.WithField("signal", sig)
+		logger.Info("signal.shutdown.gently")
 		controller.SetTarget(minecraft.ShutdownTarget)
 		<-time.After(10 * time.Second)
-		log.Warn("forcefully shutdown")
+		logger.Warn("signal.shutdown.forcefully")
 		stopSupervisor()
 	}()
 

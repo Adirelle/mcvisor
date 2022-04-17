@@ -66,9 +66,7 @@ func (d *AsyncDispatcher) handleCommand(cmd command, ctx context.Context) {
 		dispatchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		defer close(c.done)
-		logger := log.WithFields(log.Fields{
-			"event": fmt.Sprintf("%#v", c.Event),
-		})
+		logger := log.WithFields(c.Event)
 		logger.Debug("event.dispatch")
 		all := &sync.WaitGroup{}
 		for _, handler := range d.handlers {

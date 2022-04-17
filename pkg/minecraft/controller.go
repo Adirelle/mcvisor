@@ -29,8 +29,7 @@ type (
 	}
 
 	TargetChanged struct {
-		Old Target
-		New Target
+		Target
 	}
 
 	startTarget    string
@@ -73,24 +72,29 @@ func (c *Controller) Serve(ctx context.Context) error {
 	return events.Serve(c.HandlerBase, c.HandleEvent, ctx)
 }
 
-func (c *Controller) SetTarget(newTarget Target) {
-	oldTarget := c.target
-	if oldTarget == newTarget {
+func (c *Controller) setStatus(status Status) {
+	if c.status == status {
 		return
 	}
-	c.target = newTarget
-	log.WithField("target", newTarget).Info("controller.target")
-	c.DispatchEvent(TargetChanged{oldTarget, newTarget})
+	c.status = status
+	log.WithField("status", status).Info("controller.status")
+	c.iterate()
+}
+
+func (c *Controller) SetTarget(target Target) {
+	if c.target == target {
+		return
+	}
+	c.target = target
+	log.WithField("target", target).Info("controller.target")
+	c.DispatchEvent(&TargetChanged{target})
 	c.iterate()
 }
 
 func (c *Controller) HandleEvent(event events.Event) {
 	switch typed := event.(type) {
 	case StatusChanged:
-		if typed.New != c.status {
-			c.status = typed.New
-			c.iterate()
-		}
+		c.setStatus(Status(typed))
 	case *commands.Command:
 		switch typed.Name {
 		case StartCommand:
@@ -108,6 +112,10 @@ func (c *Controller) HandleEvent(event events.Event) {
 func (c *Controller) iterate() {
 	newTarget := c.target.apply(c.status, c.ctl)
 	c.SetTarget(newTarget)
+}
+
+func (t *TargetChanged) Fields() log.Fields {
+	return log.Fields{"target": t.Target}
 }
 
 func (t startTarget) apply(status Status, ctl Control) Target {

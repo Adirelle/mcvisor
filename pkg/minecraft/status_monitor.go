@@ -21,10 +21,7 @@ type (
 		events.HandlerBase
 	}
 
-	StatusChanged struct {
-		Old Status
-		New Status
-	}
+	StatusChanged Status
 )
 
 const (
@@ -54,31 +51,34 @@ func (s *StatusMonitor) HandleEvent(event events.Event) {
 	switch typedEvent := event.(type) {
 	case *commands.Command:
 		commands.OnCommand(StatusCommand, event, s.handleStatusCommand)
-	case ServerEvent:
+	case *ServerEvent:
 		s.setStatus(typedEvent.Status)
-	case PingSucceeded:
+	case *PingSucceeded:
 		if s.Status == Started || s.Status == Unreachable {
 			s.setStatus(Ready)
 		}
-	case PingFailed:
+	case *PingFailed:
 		if s.Status == Ready {
 			s.setStatus(Unreachable)
 		}
 	}
 }
 
-func (s *StatusMonitor) setStatus(newStatus Status) {
-	oldStatus := s.Status
-	if newStatus == oldStatus {
+func (s *StatusMonitor) setStatus(status Status) {
+	if status == s.Status {
 		return
 	}
-	s.Status = newStatus
+	s.Status = status
 	s.When = time.Now()
-	log.WithField("status", newStatus).Info("server.status")
-	s.DispatchEvent(StatusChanged{New: newStatus, Old: oldStatus})
+	log.WithField("status", status).Info("server.status")
+	s.DispatchEvent(StatusChanged(status))
 }
 
 func (s *StatusMonitor) handleStatusCommand(cmd *commands.Command) error {
 	_, _ = fmt.Fprintf(cmd.Reply, "Server %s <t:%d:R>", s.Status, s.When.Unix())
 	return nil
+}
+
+func (s StatusChanged) Fields() log.Fields {
+	return log.Fields{"status": Status(s)}
 }
