@@ -12,21 +12,23 @@ import (
 
 type (
 	Bot struct {
-		Token   utils.Secret
-		GuildID Snowflake
-		events.Dispatcher
+		Token      utils.Secret
+		GuildID    Snowflake
+		dispatcher events.Dispatcher
 		events.HandlerBase
 		*discordgo.Session
 	}
 )
 
 func NewBot(config Config, dispatcher events.Dispatcher) *Bot {
-	return &Bot{
+	b := &Bot{
 		Token:       config.Token,
 		GuildID:     config.GuildID,
-		Dispatcher:  dispatcher,
+		dispatcher:  dispatcher,
 		HandlerBase: events.MakeHandlerBase(),
 	}
+	dispatcher.Add(b)
+	return b
 }
 
 func (b *Bot) GoString() string {

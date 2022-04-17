@@ -78,11 +78,13 @@ func init() {
 }
 
 func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
-	return &Pinger{
+	p := &Pinger{
 		serverPropertiesPath: conf.AbsServerProperties(),
 		Dispatcher:           dispatcher,
 		HandlerBase:          events.MakeHandlerBase(),
 	}
+	dispatcher.Add(p)
+	return p
 }
 
 func (p *Pinger) Serve(ctx context.Context) error {
@@ -104,7 +106,7 @@ func (p *Pinger) Serve(ctx context.Context) error {
 		case when := <-ticker.C:
 			p.lastPing = pinger.Ping(when)
 			log.WithField("result", p.lastPing).Debug("pinger.update")
-			p.DispatchEvent(p.lastPing)
+			p.Dispatch(p.lastPing)
 		}
 	}
 }

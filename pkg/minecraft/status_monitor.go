@@ -40,7 +40,9 @@ func init() {
 }
 
 func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {
-	return &StatusMonitor{Dispatcher: dispatcher, Status: Stopped, HandlerBase: events.MakeHandlerBase()}
+	s := &StatusMonitor{Dispatcher: dispatcher, Status: Stopped, HandlerBase: events.MakeHandlerBase()}
+	dispatcher.Add(s)
+	return s
 }
 
 func (s *StatusMonitor) Serve(ctx context.Context) error {
@@ -71,12 +73,16 @@ func (s *StatusMonitor) setStatus(status Status) {
 	s.Status = status
 	s.When = time.Now()
 	log.WithField("status", status).Info("server.status")
-	s.DispatchEvent(StatusChanged(status))
+	s.Dispatch(StatusChanged(status))
 }
 
 func (s *StatusMonitor) handleStatusCommand(cmd *commands.Command) error {
 	_, _ = fmt.Fprintf(cmd.Reply, "Server %s <t:%d:R>", s.Status, s.When.Unix())
 	return nil
+}
+
+func (s StatusChanged) Status() Status {
+	return Status(s)
 }
 
 func (s StatusChanged) Fields() log.Fields {

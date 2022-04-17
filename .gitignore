@@ -21,3 +21,4 @@
 
 # Test configuration
 mcvisor.json
+mcvisor*.log

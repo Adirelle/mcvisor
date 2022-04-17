@@ -2,16 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
+	"github.com/apex/log"
 	"github.com/go-playground/validator/v10"
 )
 
 const (
-	ConfigFilename = "mcvisor.json"
+	DefaultConfigFilename = "mcvisor.json"
 )
 
 type (
@@ -19,6 +21,7 @@ type (
 		Path      string            `json:"-"`
 		Minecraft *minecraft.Config `json:"minecraft" validate:"required"`
 		Discord   *discord.Config   `json:"discord" validate:"required"`
+		Logging   *Logging          `json:"logging"`
 	}
 )
 
@@ -38,7 +41,7 @@ func FindConfigFile(paths []string) string {
 			continue
 		}
 		if stat.IsDir() {
-			path = filepath.Join(path, ConfigFilename)
+			path = filepath.Join(path, DefaultConfigFilename)
 			_, err = os.Stat(path)
 		}
 		if err == nil {
@@ -48,21 +51,31 @@ func FindConfigFile(paths []string) string {
 	return paths[0]
 }
 
-func LoadConfig(path string) (c *Config, err error) {
-	c = &Config{
+func NewConfig(path string) (c *Config) {
+	return &Config{
 		Path:      path,
 		Minecraft: minecraft.NewConfig(filepath.Dir(path)),
 		Discord:   &discord.Config{},
+		Logging:   NewLogging(),
 	}
+}
+
+func LoadConfig(path string) (c *Config, err error) {
+	c = NewConfig(path)
 
 	err = c.Read()
-	if os.IsNotExist(err) {
-		err = c.Write()
+	if err != nil && !os.IsNotExist(err) {
+		return
 	}
+
+	err = validator.New().Struct(c)
 	if err != nil {
 		return
 	}
-	err = validator.New().Struct(c)
+
+	if writeError := c.Write(); writeError != nil {
+		log.WithField("path", path).WithError(writeError).Error("log.file.write")
+	}
 
 	return
 }
@@ -74,15 +87,22 @@ func (c *Config) Apply() {
 func (c *Config) Read() error {
 	content, err := os.ReadFile(c.Path)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not read configuration: %w", err)
 	}
-	return json.Unmarshal(content, c)
+	err = json.Unmarshal(content, c)
+	if err != nil {
+		return fmt.Errorf("invalid configuration file: %w", err)
+	}
+	return err
 }
 
 func (c *Config) Write() error {
-	content, err := json.Marshal(&c)
+	file, err := os.Create(c.Path)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.Path, content, os.FileMode(0o666))
+	defer file.Close()
+	enc := json.NewEncoder(file)
+	enc.SetIndent("", "  ")
+	return enc.Encode(c)
 }

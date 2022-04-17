@@ -48,7 +48,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	startLogger := log.WithField("cmd", cmd.String())
 	startLogger.WithField("cmd", cmd.String()).Info("server.starting")
 
-	s.DispatchEvent(&ServerEvent{cmd, Starting})
+	s.Dispatch(&ServerEvent{cmd, Starting})
 
 	if err := cmd.Start(); err != nil {
 		startLogger.WithError(err).Error("server.start.error")
@@ -58,7 +58,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	runLogger := log.WithField("pid", cmd.Process.Pid)
 	runLogger.Info("server.started")
 
-	s.DispatchEvent(&ServerEvent{cmd, Started})
+	s.Dispatch(&ServerEvent{cmd, Started})
 
 	err := cmd.Wait()
 	if err != nil {
@@ -67,7 +67,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		runLogger.Info("server.stopped")
 	}
 
-	s.DispatchEvent(&ServerEvent{cmd, Stopped})
+	s.Dispatch(&ServerEvent{cmd, Stopped})
 
 	return err
 }

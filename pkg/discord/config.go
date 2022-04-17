@@ -12,15 +12,19 @@ type (
 	Config struct {
 		Token         utils.Secret                            `json:"token" validate:"required"`
 		GuildID       Snowflake                               `json:"serverId" validate:"omitempty"`
-		CommandPrefix rune                                    `json:"commandPrefix" validate:"omitempty"`
+		CommandPrefix string                                  `json:"commandPrefix" validate:"omitempty,len=1"`
 		Permissions   map[permissions.Category]permissionList `json:"permissions,omitempty" validate:"omitempty"`
 	}
 )
 
-func (c Config) Apply() {
-	if c.CommandPrefix != 0 {
-		commands.Prefix = c.CommandPrefix
+func NewConfig() *Config {
+	return &Config{
+		CommandPrefix: "!",
 	}
+}
+
+func (c Config) Apply() {
+	commands.Prefix = rune(c.CommandPrefix[0])
 	for cat, list := range c.Permissions {
 		perms := make([]permissions.Permission, len(list))
 		for i, item := range list {

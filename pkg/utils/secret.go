@@ -1,5 +1,7 @@
 package utils
 
+import "encoding/json"
+
 type Secret string
 
 func (s *Secret) Reveal() string {
@@ -11,7 +13,8 @@ func (s *Secret) Reveal() string {
 }
 
 func (s Secret) MarshalJSON() ([]byte, error) {
-	return []byte(s), nil
+	value := string(s)
+	return json.Marshal(&value)
 }
 
 func (Secret) String() string {

@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -11,7 +12,8 @@ import (
 
 type (
 	Dispatcher interface {
-		DispatchEvent(Event)
+		Dispatch(Event)
+		Add(Handler)
 	}
 
 	AsyncDispatcher struct {
@@ -19,11 +21,11 @@ type (
 		handlers []Handler
 	}
 
-	command interface{}
+	command interface {
+		apply(context.Context, *AsyncDispatcher)
+	}
 
-	addCommand    struct{ Handler }
-	removeCommand struct{ Handler }
-
+	addCommand      struct{ Handler }
 	dispatchCommand struct {
 		Event
 		done chan struct{}
@@ -40,7 +42,7 @@ func (d *AsyncDispatcher) Serve(ctx context.Context) error {
 	for {
 		select {
 		case cmd := <-d.ctl:
-			d.handleCommand(cmd, ctx)
+			cmd.apply(ctx, d)
 		case <-ctx.Done():
 			return nil
 		}
@@ -51,53 +53,42 @@ func (d *AsyncDispatcher) GoString() string {
 	return fmt.Sprintf("Dispatcher(%d, %d/%d)", len(d.handlers), len(d.ctl), cap(d.ctl))
 }
 
-func (d *AsyncDispatcher) handleCommand(cmd command, ctx context.Context) {
-	switch c := cmd.(type) {
-	case addCommand:
-		d.handlers = append(d.handlers, c.Handler)
-	case removeCommand:
-		for i, handler := range d.handlers {
-			if handler == c.Handler {
-				d.handlers = append(d.handlers[:i], d.handlers[i+1:]...)
-				break
-			}
-		}
-	case dispatchCommand:
-		dispatchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		defer close(c.done)
-		logger := log.WithFields(c.Event)
-		logger.Debug("event.dispatch")
-		all := &sync.WaitGroup{}
-		for _, handler := range d.handlers {
-			all.Add(1)
-			go func(handler Handler) {
-				defer all.Done()
-				select {
-				case handler.EventC() <- c.Event:
-				case <-dispatchCtx.Done():
-					logger.WithField("handler", handler).Error("event.dispatch.dropped")
-				}
-			}(handler)
-		}
-		all.Wait()
-	}
+func (d AsyncDispatcher) Add(handler Handler) {
+	d.ctl <- &addCommand{handler}
 }
 
-func (d AsyncDispatcher) DispatchEvent(events Event) {
+func (c *addCommand) apply(_ context.Context, d *AsyncDispatcher) {
+	d.handlers = append(d.handlers, c.Handler)
+}
+
+func (d AsyncDispatcher) Dispatch(events Event) {
 	done := make(chan struct{})
-	d.ctl <- dispatchCommand{events, done}
+	d.ctl <- &dispatchCommand{events, done}
 	<-done
 }
 
-func (d AsyncDispatcher) HandleEvent(events Event) {
-	d.DispatchEvent(events)
-}
+func (c *dispatchCommand) apply(ctx context.Context, d *AsyncDispatcher) {
+	defer close(c.done)
 
-func (d AsyncDispatcher) AddHandler(handler Handler) {
-	d.ctl <- addCommand{handler}
-}
+	dispatchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-func (d AsyncDispatcher) RemoveHandler(handler Handler) {
-	d.ctl <- removeCommand{handler}
+	logger := log.WithFields(c.Event).WithField("type", reflect.TypeOf(c.Event).String())
+	logger.Debug("event.dispatch")
+
+	all := &sync.WaitGroup{}
+	for _, handler := range d.handlers {
+		all.Add(1)
+
+		go func(handler Handler) {
+			defer all.Done()
+			select {
+			case handler.EventC() <- c.Event:
+			case <-dispatchCtx.Done():
+				logger.WithField("handler", handler).Error("event.dispatch.dropped")
+			}
+		}(handler)
+
+	}
+	all.Wait()
 }

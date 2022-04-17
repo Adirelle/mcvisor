@@ -55,7 +55,7 @@ func (b *Bot) execCommand(session *discordgo.Session, message *discordgo.Message
 		return permissions.ErrPermissionDenied
 	}
 
-	b.DispatchEvent(command)
+	b.dispatcher.Dispatch(command)
 	return nil
 }
 

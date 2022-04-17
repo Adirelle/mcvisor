@@ -7,35 +7,28 @@ import (
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/apex/log"
+	"github.com/thejerf/suture/v4"
 )
 
 type (
 	Controller struct {
 		events.HandlerBase
 		events.Dispatcher
-		ctl    Control
-		status Status
-		target Target
+		ctl Control
 	}
 
-	Target interface {
-		apply(status Status, ctl Control) Target
-	}
+	Target string
 
 	Control interface {
 		Start()
 		Stop()
-		Terminate()
 	}
 
 	TargetChanged struct {
 		Target
 	}
 
-	startTarget    string
-	stopTarget     string
-	restartTarget  string
-	shutdownTarget string
+	systemShutdown int
 )
 
 const (
@@ -44,10 +37,23 @@ const (
 	RestartCommand  commands.Name = "restart"
 	ShutdownCommand commands.Name = "shutdown"
 
-	StartTarget    startTarget    = "start"
-	StopTarget     stopTarget     = "stop"
-	RestartTarget  restartTarget  = "restart"
-	ShutdownTarget shutdownTarget = "shutdown"
+	StartTarget    Target = "start"
+	StopTarget     Target = "stop"
+	RestartTarget  Target = "restart"
+	ShutdownTarget Target = "shutdown"
+)
+
+var (
+	commandTargets = map[commands.Name]Target{
+		StartCommand:    StartTarget,
+		StopCommand:     StopTarget,
+		RestartCommand:  RestartTarget,
+		ShutdownCommand: ShutdownTarget,
+	}
+
+	SystemShutdown events.Event = systemShutdown(0)
+
+	_10 events.Event = (*TargetChanged)(nil)
 )
 
 func init() {
@@ -57,104 +63,82 @@ func init() {
 	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", permissions.AdminCategory)
 }
 
-func NewController(control Control, dispatcher events.Dispatcher) (c *Controller) {
-	return &Controller{
+func NewController(control Control, dispatcher events.Dispatcher) *Controller {
+	c := &Controller{
 		HandlerBase: events.MakeHandlerBase(),
 		Dispatcher:  dispatcher,
 		ctl:         control,
-		status:      Stopped,
-		target:      StartTarget,
 	}
+	dispatcher.Add(c)
+	return c
 }
 
 func (c *Controller) Serve(ctx context.Context) error {
-	c.iterate()
-	return events.Serve(c.HandlerBase, c.HandleEvent, ctx)
-}
+	status := Stopped
+	target := StopTarget
+	newStatus := status
+	newTarget := StartTarget
+	done := ctx.Done()
 
-func (c *Controller) setStatus(status Status) {
-	if c.status == status {
-		return
-	}
-	c.status = status
-	log.WithField("status", status).Info("controller.status")
-	c.iterate()
-}
+	for {
+		if newStatus != status || newTarget != target {
+			if newStatus != status {
+				status = newStatus
+				log.WithField("status", status).Debug("controller.status")
+			}
+			if newTarget != target {
+				target = newTarget
+				log.WithField("target", target).Debug("controller.target")
+				c.Dispatch(&TargetChanged{target})
+			}
 
-func (c *Controller) SetTarget(target Target) {
-	if c.target == target {
-		return
-	}
-	c.target = target
-	log.WithField("target", target).Info("controller.target")
-	c.DispatchEvent(&TargetChanged{target})
-	c.iterate()
-}
+			switch target {
+			case RestartTarget:
+				if status == Stopped {
+					newTarget = StartTarget
+					c.ctl.Start()
+				} else if status != Stopping {
+					c.ctl.Stop()
+				}
+			case StartTarget:
+				if status == Stopped {
+					c.ctl.Start()
+				}
+			case ShutdownTarget:
+				if status == Stopped {
+					return suture.ErrTerminateSupervisorTree
+				}
+				fallthrough
+			case StopTarget:
+				if status != Stopped && status != Stopping {
+					c.ctl.Stop()
+				}
+			}
+		}
 
-func (c *Controller) HandleEvent(event events.Event) {
-	switch typed := event.(type) {
-	case StatusChanged:
-		c.setStatus(Status(typed))
-	case *commands.Command:
-		switch typed.Name {
-		case StartCommand:
-			c.SetTarget(StartTarget)
-		case StopCommand:
-			c.SetTarget(StopTarget)
-		case RestartCommand:
-			c.SetTarget(RestartTarget)
-		case ShutdownCommand:
-			c.SetTarget(ShutdownTarget)
+		select {
+		case event := <-c.HandlerBase:
+			switch typedEvent := event.(type) {
+			case StatusChanged:
+				newStatus = typedEvent.Status()
+			case systemShutdown:
+				newTarget = ShutdownTarget
+			case *commands.Command:
+				if target, found := commandTargets[typedEvent.Name]; found {
+					newTarget = target
+				}
+			}
+		case <-done:
+			done = nil
+			newTarget = ShutdownTarget
 		}
 	}
-}
-
-func (c *Controller) iterate() {
-	newTarget := c.target.apply(c.status, c.ctl)
-	c.SetTarget(newTarget)
 }
 
 func (t *TargetChanged) Fields() log.Fields {
 	return log.Fields{"target": t.Target}
 }
 
-func (t startTarget) apply(status Status, ctl Control) Target {
-	if status == Stopped {
-		ctl.Start()
-	}
-	return t
-}
-
-func (t stopTarget) apply(status Status, ctl Control) Target {
-	switch status {
-	case Stopping, Stopped:
-		// NOOP
-	default:
-		ctl.Stop()
-	}
-	return t
-}
-
-func (t restartTarget) apply(status Status, ctl Control) Target {
-	switch status {
-	case Stopping:
-		// NOOP
-	case Stopped:
-		return StartTarget
-	default:
-		ctl.Stop()
-	}
-	return t
-}
-
-func (t shutdownTarget) apply(status Status, ctl Control) Target {
-	switch status {
-	case Stopping:
-		// NOOP
-	case Stopped:
-		ctl.Terminate()
-	default:
-		ctl.Stop()
-	}
-	return t
+func (systemShutdown) Fields() log.Fields {
+	return nil
 }

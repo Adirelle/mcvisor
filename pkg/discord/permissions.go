@@ -15,9 +15,9 @@ type (
 	AllowedChannel Snowflake
 
 	PermissionItem struct {
-		AllowUser    *Snowflake `json:"userId" validate:"omitempty,required_without_all=AllowRole AllowChannel"`
-		AllowRole    *Snowflake `json:"roleId" validate:"omitempty,required_without_all=AllowUser AllowChannel"`
-		AllowChannel *Snowflake `json:"channelId" validate:"omitempty,required_without_all=AllowRole AllowUser"`
+		AllowUser    *Snowflake `json:"userId,omitempty" validate:"omitempty,required_without_all=AllowRole AllowChannel"`
+		AllowRole    *Snowflake `json:"roleId,omitempty" validate:"omitempty,required_without_all=AllowUser AllowChannel"`
+		AllowChannel *Snowflake `json:"channelId,omitempty" validate:"omitempty,required_without_all=AllowRole AllowUser"`
 	}
 )
 

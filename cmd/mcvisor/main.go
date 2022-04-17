@@ -1,17 +1,17 @@
 package main
 
 import (
-	"context"
+	stdlog "log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
+	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/apex/log"
-	"github.com/apex/log/handlers/cli"
+	"github.com/apex/log/handlers/multi"
 	"github.com/thejerf/suture/v4"
 )
 
@@ -24,56 +24,103 @@ type (
 	}
 )
 
-var cliLogHandler = cli.New(os.Stderr)
-
-func init() {
-	log.SetHandler(cliLogHandler)
-	log.SetLevel(log.DebugLevel)
+var SutureEventLabels = map[suture.EventType]string{
+	suture.EventTypeStopTimeout:      "timeout",
+	suture.EventTypeServicePanic:     "panic",
+	suture.EventTypeServiceTerminate: "terminate",
+	suture.EventTypeBackoff:          "backoff",
+	suture.EventTypeResume:           "resume",
 }
 
 func main() {
 	conf, err := LoadConfig(FindConfigFile(ConfigSearchPath()))
 	if err != nil {
-		log.WithError(err).Fatal("could not load configuration")
+		stdlog.Fatalf("could not load configuration: %s", err)
 	}
-	conf.Apply()
 
-	rootSupervisor := MakeRootSupervisor()
-	rootSupervisor.Add(commands.EventHandler)
+	mainSupervisor, dispatcher := NewMainSupervisor(conf)
+	mainC := mainSupervisor.ServeBackground(nil)
 
-	status := minecraft.NewStatusMonitor(rootSupervisor.Dispatcher)
-	rootSupervisor.Add(status)
-
-	bot := discord.NewBot(*conf.Discord, rootSupervisor.Dispatcher)
-	rootSupervisor.Add(bot)
-
-	server := minecraft.NewServer(*conf.Minecraft, rootSupervisor.Dispatcher)
-
-	pinger := minecraft.NewPinger(*conf.Minecraft, rootSupervisor.Dispatcher)
-	rootSupervisor.Add(pinger)
-
-	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
-	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: server, stop: stopSupervisor}
-	controller := minecraft.NewController(control, rootSupervisor.Dispatcher)
-	rootSupervisor.Add(controller)
+	minecraftSupervisor := NewMinecraftSupervisor(conf, dispatcher)
+	mainSupervisor.Add(minecraftSupervisor)
 
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		sig := <-signals
-		signal.Stop(signals)
-		logger := log.WithField("signal", sig)
-		logger.Info("signal.shutdown.gently")
-		controller.SetTarget(minecraft.ShutdownTarget)
-		<-time.After(10 * time.Second)
-		logger.Warn("signal.shutdown.forcefully")
-		stopSupervisor()
-	}()
+	signal.Notify(signals, os.Kill, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	err = rootSupervisor.Serve(supervisorCtx)
-	if err != nil && err != context.Canceled {
-		log.WithError(err).Fatal("exit")
+	for {
+		select {
+		case sig := <-signals:
+			log.WithField("signal", sig).Warn("signal.received")
+			dispatcher.Dispatch(minecraft.SystemShutdown)
+		case err := <-mainC:
+			if err != nil && err != suture.ErrTerminateSupervisorTree {
+				stdlog.Fatalf("error: %s", err)
+			}
+			os.Exit(0)
+		}
 	}
+}
+
+func NewMainSupervisor(conf *Config) (*suture.Supervisor, events.Dispatcher) {
+	supervisor := suture.New("main", suture.Spec{
+		EventHook: suture.EventHook(func(event suture.Event) {
+			log.
+				WithField("message", event.String()).
+				WithFields(log.Fields(event.Map())).
+				Warnf("suture.%s", SutureEventLabels[event.Type()])
+		}),
+	})
+
+	SetUpLogging(conf.Logging, supervisor)
+
+	dispatcher := events.NewAsyncDispatcher()
+	supervisor.Add(dispatcher)
+
+	return supervisor, dispatcher
+}
+
+func SetUpLogging(conf *Logging, supervisor *suture.Supervisor) {
+	var handler log.Handler
+
+	minLevel := conf.Console.Level()
+	handler = conf.Console.Handler()
+
+	if conf.File != nil && !conf.File.Disabled {
+		fileHandler := conf.File.Handler()
+		supervisor.Add(conf.File)
+		handler = multi.New(handler, fileHandler)
+		if conf.File.Level < minLevel {
+			minLevel = conf.File.Level
+		}
+	}
+
+	log.SetHandler(handler)
+	log.SetLevel(minLevel)
+}
+
+func NewMinecraftSupervisor(conf *Config, dispatcher events.Dispatcher) *suture.Supervisor {
+	supervisor := suture.NewSimple("minecraft")
+
+	supervisor.Add(commands.EventHandler)
+	dispatcher.Add(commands.EventHandler)
+
+	status := minecraft.NewStatusMonitor(dispatcher)
+	supervisor.Add(status)
+
+	conf.Discord.Apply()
+	bot := discord.NewBot(*conf.Discord, dispatcher)
+	supervisor.Add(bot)
+
+	server := minecraft.NewServer(*conf.Minecraft, dispatcher)
+
+	control := &serverControl{supervisor: supervisor, server: server}
+	controller := minecraft.NewController(control, dispatcher)
+	supervisor.Add(controller)
+
+	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
+	supervisor.Add(pinger)
+
+	return supervisor
 }
 
 func (c *serverControl) Start() {
