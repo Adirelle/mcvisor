@@ -41,20 +41,13 @@ func init() {
 }
 
 func handleCommands(event events.Event) {
-	if cmd, ok := event.(Command); ok {
-		switch cmd.Name {
-		case PermCommand:
-			HandlePermCommand(cmd)
-		case HelpCommand:
-			HandleHelpCommand(cmd)
-		default:
-			// NOOP
-		}
+	switch {
+	case OnCommand(PermCommand, event, HandlePermCommand),
+		OnCommand(HelpCommand, event, HandleHelpCommand):
 	}
 }
 
-func HandleHelpCommand(cmd Command) {
-	defer cmd.Reply.Flush()
+func HandleHelpCommand(cmd *Command) error {
 	lineFmt := fmt.Sprintf("%%-%ds - %%s\n", maxCommandNameLen)
 	_, _ = io.WriteString(cmd.Reply, "\n```\n")
 	for _, def := range commands {
@@ -63,12 +56,13 @@ func HandleHelpCommand(cmd Command) {
 		}
 	}
 	_, _ = io.WriteString(cmd.Reply, "```")
+	return nil
 }
 
-func HandlePermCommand(cmd Command) {
-	defer cmd.Reply.Flush()
+func HandlePermCommand(cmd *Command) error {
 	_, _ = io.WriteString(cmd.Reply, "Command permissons:\n")
 	for _, c := range commands {
 		_, _ = fmt.Fprintf(cmd.Reply, "`%s`: %s\n", c.Name, c.Permission().DescribePermission())
 	}
+	return nil
 }

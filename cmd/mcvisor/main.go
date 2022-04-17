@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
@@ -27,12 +28,11 @@ var cliLogHandler = cli.New(os.Stderr)
 
 func init() {
 	log.SetHandler(cliLogHandler)
-	log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.DebugLevel)
 }
 
 func main() {
-	conf := NewConfig()
-	err := conf.Load()
+	conf, err := LoadConfig(FindConfigFile(ConfigSearchPath()))
 	if err != nil {
 		log.WithError(err).Fatal("could not load configuration")
 	}
@@ -47,27 +47,26 @@ func main() {
 	bot := discord.NewBot(*conf.Discord, rootSupervisor.Dispatcher)
 	rootSupervisor.Add(bot)
 
-	serverServices := suture.NewSimple("Server services")
-
 	server := minecraft.NewServer(*conf.Minecraft, rootSupervisor.Dispatcher)
-	serverServices.Add(server)
 
 	pinger := minecraft.NewPinger(*conf.Minecraft, rootSupervisor.Dispatcher)
-	serverServices.Add(pinger)
-	rootSupervisor.Dispatcher.AddHandler(pinger)
+	rootSupervisor.Add(pinger)
 
 	supervisorCtx, stopSupervisor := context.WithCancel(context.Background())
-	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: serverServices, stop: stopSupervisor}
+	control := &serverControl{supervisor: rootSupervisor.Supervisor, server: server, stop: stopSupervisor}
 	controller := minecraft.NewController(control, rootSupervisor.Dispatcher)
 	rootSupervisor.Add(controller)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		for signal := range signals {
-			log.WithField("signal", signal).Info("signal.received")
-			controller.SetTarget(minecraft.ShutdownTarget)
-		}
+		sig := <-signals
+		signal.Stop(signals)
+		log.WithField("signal", sig).Info("shutting down on signal")
+		controller.SetTarget(minecraft.ShutdownTarget)
+		<-time.After(10 * time.Second)
+		log.Warn("forcefully shutdown")
+		stopSupervisor()
 	}()
 
 	err = rootSupervisor.Serve(supervisorCtx)
@@ -80,6 +79,7 @@ func (c *serverControl) Start() {
 	if c.token != nil {
 		return
 	}
+	log.Info("server.enable")
 	token := c.supervisor.Add(c.server)
 	c.token = &token
 }
@@ -88,13 +88,15 @@ func (c *serverControl) Stop() {
 	if c.token == nil {
 		return
 	}
+	log.Info("server.disable")
 	err := c.supervisor.RemoveAndWait(*c.token, 0)
 	if err != nil {
-		log.WithError(err).Error("stopping server")
+		log.WithError(err).Error("server.disable")
 	}
 	c.token = nil
 }
 
 func (c *serverControl) Terminate() {
+	log.Info("server.shutdown")
 	c.stop()
 }

@@ -10,11 +10,10 @@ type (
 	permissionList []PermissionItem
 
 	Config struct {
-		Token         utils.Secret                                 `json:"token" validate:"required"`
-		GuildID       Snowflake                                    `json:"serverId" validate:"omitempty"`
-		CommandPrefix rune                                         `json:"commandPrefix" validate:"omitempty"`
-		Permissions   map[permissions.Category]permissionList      `json:"permissions,omitempty" validate:"omitempty"`
-		Notifications map[NotificationCategory]NotificationTargets `json:"notifications,omitempty" validate:"omitempty"`
+		Token         utils.Secret                            `json:"token" validate:"required"`
+		GuildID       Snowflake                               `json:"serverId" validate:"omitempty"`
+		CommandPrefix rune                                    `json:"commandPrefix" validate:"omitempty"`
+		Permissions   map[permissions.Category]permissionList `json:"permissions,omitempty" validate:"omitempty"`
 	}
 )
 

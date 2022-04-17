@@ -3,137 +3,82 @@ package minecraft
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
-	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/apex/log"
 )
 
 type (
-	Status int
+	Status string
 
 	StatusMonitor struct {
 		Status
-		LastUpdate events.Time
+		When time.Time
 		events.Dispatcher
 		events.HandlerBase
 	}
 
 	StatusChanged struct {
-		events.Time
-		Status Status
+		Old Status
+		New Status
 	}
 )
 
-var StatusChangedType = events.Type("server.status.changed")
-
 const (
-	Stopped Status = iota
-	Starting
-	Started
-	Ready
-	Unreachable
-	Stopping
+	Stopped     Status = "stopped"
+	Starting    Status = "starting"
+	Started     Status = "started"
+	Ready       Status = "ready"
+	Unreachable Status = "unreachable"
+	Stopping    Status = "stopping"
 
 	StatusCommand commands.Name = "status"
 )
 
 func init() {
-	commands.Register(StatusCommand, "check server status", permissions.QueryCategory)
+	commands.Register(StatusCommand, "show server status", permissions.QueryCategory)
 }
 
 func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {
 	return &StatusMonitor{Dispatcher: dispatcher, Status: Stopped, HandlerBase: events.MakeHandlerBase()}
 }
 
-func (s *StatusMonitor) GoString() string {
-	return "Status Monitor"
-}
-
 func (s *StatusMonitor) Serve(ctx context.Context) error {
 	return events.Serve(s.HandlerBase, s.HandleEvent, ctx)
 }
 
-func (s *StatusMonitor) HandleEvent(ev events.Event) {
-	if c, ok := ev.(commands.Command); ok && c.Name == StatusCommand {
-		_, _ = fmt.Fprintf(c.Reply, "%s since %s", s.Status, s.LastUpdate.DiscordRelative())
-		_ = c.Reply.Flush()
-		return
-	}
-
-	newStatus := s.Status.resolve(ev)
-	log.WithFields(log.Fields{
-		"event":     ev.Type(),
-		"oldStatus": s.Status,
-		"newStatus": newStatus,
-	}).Debug("server.status.iterate")
-	if newStatus != s.Status {
-		s.Status = newStatus
-		s.LastUpdate = events.Now()
-		s.DispatchEvent(StatusChanged{events.Time(s.LastUpdate), s.Status})
-	}
-}
-
-func (s Status) resolve(ev events.Event) Status {
-	switch ev.(type) {
-	case ServerStarting:
-		return Starting
-	case ServerStarted:
-		return Started
-	case ServerStopping:
-		return Stopping
-	case ServerStopped:
-		return Stopped
+func (s *StatusMonitor) HandleEvent(event events.Event) {
+	switch typedEvent := event.(type) {
+	case *commands.Command:
+		commands.OnCommand(StatusCommand, event, s.handleStatusCommand)
+	case ServerEvent:
+		s.setStatus(typedEvent.Status)
 	case PingSucceeded:
-		if s == Started || s == Unreachable {
-			return Ready
+		if s.Status == Started || s.Status == Unreachable {
+			s.setStatus(Ready)
 		}
 	case PingFailed:
-		if s == Ready {
-			return Unreachable
+		if s.Status == Ready {
+			s.setStatus(Unreachable)
 		}
 	}
-	return s
 }
 
-func (s Status) String() string {
-	switch s {
-	case Stopped:
-		return "stopped"
-	case Starting:
-		return "starting"
-	case Started:
-		return "started"
-	case Ready:
-		return "ready"
-	case Unreachable:
-		return "unreachable"
-	case Stopping:
-		return "stopping"
-	default:
-		return fmt.Sprintf("in an unknown state (%d)", s)
+func (s *StatusMonitor) setStatus(newStatus Status) {
+	oldStatus := s.Status
+	if newStatus == oldStatus {
+		return
 	}
+	s.Status = newStatus
+	s.When = time.Now()
+	log.WithField("status", newStatus).Info("server.status")
+	s.DispatchEvent(StatusChanged{New: newStatus, Old: oldStatus})
 }
 
-func (StatusChanged) Type() events.Type {
-	return StatusChangedType
-}
-
-func (e StatusChanged) String() string {
-	return fmt.Sprintf("status changed to %s", e.Status)
-}
-
-func (e StatusChanged) Category() discord.NotificationCategory {
-	switch e.Status {
-	case Starting, Ready, Unreachable, Stopped:
-		return discord.StatusCategory
-	default:
-		return discord.IgnoredCategory
-	}
-}
-
-func (e StatusChanged) Message() string {
-	return "Server " + e.Status.String()
+func (s *StatusMonitor) handleStatusCommand(cmd *commands.Command) error {
+	_, _ = fmt.Fprintf(cmd.Reply, "Server %s <t:%d:R>", s.Status, s.When.Unix())
+	return nil
 }

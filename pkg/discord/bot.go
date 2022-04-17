@@ -12,9 +12,8 @@ import (
 
 type (
 	Bot struct {
-		Token         utils.Secret
-		GuildID       Snowflake
-		Notifications map[NotificationCategory]NotificationTargets
+		Token   utils.Secret
+		GuildID Snowflake
 		events.Dispatcher
 		events.HandlerBase
 		*discordgo.Session
@@ -23,11 +22,10 @@ type (
 
 func NewBot(config Config, dispatcher events.Dispatcher) *Bot {
 	return &Bot{
-		Token:         config.Token,
-		GuildID:       config.GuildID,
-		Notifications: config.Notifications,
-		Dispatcher:    dispatcher,
-		HandlerBase:   events.MakeHandlerBase(),
+		Token:       config.Token,
+		GuildID:     config.GuildID,
+		Dispatcher:  dispatcher,
+		HandlerBase: events.MakeHandlerBase(),
 	}
 }
 
@@ -46,13 +44,9 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 }
 
 func (b *Bot) HandleEvent(event events.Event) {
-	if notif, ok := event.(Notification); ok && b.Session != nil {
-		b.handleNotification(notif)
-	}
-}
-
-func (b *Bot) onReady(session *discordgo.Session, ready *discordgo.Ready) {
-	log.WithField("username", ready.User.Username).Info("discord.ready")
+	// if notif, ok := event.(Notification); ok && b.Session != nil {
+	// 	b.handleNotification(notif)
+	// }
 }
 
 func (b *Bot) connect() (err error) {
@@ -73,6 +67,10 @@ func (b *Bot) connect() (err error) {
 		log.WithError(err).Error("discord.connect")
 	}
 	return
+}
+
+func (b *Bot) onReady(session *discordgo.Session, ready *discordgo.Ready) {
+	log.WithField("username", ready.User.Username).Info("discord.ready")
 }
 
 func (b *Bot) disconnect() (err error) {

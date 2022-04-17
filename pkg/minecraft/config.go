@@ -7,79 +7,69 @@ import (
 
 const (
 	DefaultServerJar        = "server.jar"
-	DefaultPidfile          = "server.pid"
 	DefaultServerProperties = "server.properties"
 	JaveHomeEnvName         = "JAVA_HOME"
 )
 
 type Config struct {
-	WorkingDir     string   `json:"working_dir,omitempty" validate:"dir"`
-	JavaHome       string   `json:"java_home,omitempty" validate:"dir"`
-	JavaParameters []string `json:"java_parameters,omitempty"`
-	ServerJarPath  string   `json:"server_jar,omitempty" validate:"file"`
-	Parameters     []string `json:"parameters,omitempty"`
-	PidFile        string   `json:"pid_file,omitempty"`
+	BaseDir          string   `json:"-"`
+	WorkingDir       string   `json:"working_dir,omitempty"`
+	JavaHome         string   `json:"java_home,omitempty"`
+	JavaParameters   []string `json:"java_parameters,omitempty"`
+	ServerJar        string   `json:"server_jar,omitempty"`
+	ServerProperties string   `json:"server_properties,omitempty"`
+	Parameters       []string `json:"parameters,omitempty"`
 }
 
-func (c *Config) ConfigureDefaults() {
-	if c.JavaHome == "" {
-		c.JavaHome = os.Getenv(JaveHomeEnvName)
-	}
-	if c.JavaParameters == nil {
-		c.JavaParameters = []string{
+func NewConfig(baseDir string) *Config {
+	baseDir = filepath.Clean(baseDir)
+	return &Config{
+		BaseDir:    baseDir,
+		WorkingDir: baseDir,
+		JavaHome:   os.Getenv(JaveHomeEnvName),
+		JavaParameters: []string{
 			"-XX:+UnlockExperimentalVMOptions",
 			"-XX:+UseG1GC",
 			"-XX:G1NewSizePercent=20",
 			"-XX:G1ReservePercent=20",
 			"-XX:MaxGCPauseMillis=50",
 			"-XX:G1HeapRegionSize=32M",
-		}
-	}
-	if c.ServerJarPath == "" {
-		c.ServerJarPath = DefaultServerJar
-	}
-	if c.PidFile == "" {
-		c.PidFile = DefaultPidfile
+		},
+		ServerJar:        DefaultServerJar,
+		ServerProperties: DefaultServerProperties,
 	}
 }
 
-func (c *Config) SetBaseDir(baseDir string) {
-	c.WorkingDir = resolvePath(baseDir, c.WorkingDir)
-	c.JavaHome = resolvePath(c.WorkingDir, c.JavaHome)
-	c.ServerJarPath = resolvePath(c.WorkingDir, c.ServerJarPath)
-	c.PidFile = resolvePath(c.WorkingDir, c.PidFile)
+func (c Config) AbsWorkingDir() string {
+	return absPath(c.BaseDir, c.WorkingDir)
+}
+
+func (c Config) AbsJavaHome() string {
+	return absPath(c.BaseDir, c.JavaHome)
 }
 
 func (c Config) Command() string {
-	return filepath.Join(c.JavaHome, JavaCmd)
+	return filepath.Join(c.AbsJavaHome(), JavaCmd)
 }
 
-func (c Config) CmdLine() []string {
-	return append(
-		append(
-			append(
-				[]string{c.Command()},
-				c.JavaParameters...,
-			),
-			"-jar",
-			c.ServerJarPath,
-		),
-		c.Parameters...,
-	)
-}
-
-func (c Config) ServerPropertiesPath() string {
-	return filepath.Join(c.WorkingDir, DefaultServerProperties)
+func (c Config) Arguments() []string {
+	args := c.JavaParameters[:]
+	args = append(args, "-jar", c.ServerJar)
+	return append(args, c.Parameters...)
 }
 
 func (c Config) Env() []string {
 	return append(
 		os.Environ(),
-		JaveHomeEnvName+"="+c.JavaHome,
+		JaveHomeEnvName+"="+c.AbsJavaHome(),
 	)
 }
 
-func resolvePath(base, path string) string {
+func (c Config) AbsServerProperties() string {
+	return absPath(c.AbsWorkingDir(), c.ServerProperties)
+}
+
+func absPath(base, path string) string {
 	if filepath.IsAbs(path) {
 		return path
 	}

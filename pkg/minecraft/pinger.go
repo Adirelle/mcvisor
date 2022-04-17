@@ -2,10 +2,8 @@ package minecraft
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
@@ -26,44 +24,49 @@ const (
 
 type (
 	Pinger struct {
-		propertyPath string
+		serverPropertiesPath string
 		events.Dispatcher
-		*pingerSettings
 		events.HandlerBase
+		lastPing PingerEvent
 	}
 
-	pingerSettings struct {
-		statusEnabled bool
-		statusPort    uint16
-		queryEnabled  bool
-		queryPort     uint16
+	pinger interface {
+		Ping(when time.Time) PingerEvent
 	}
 
-	PingEvent interface {
+	statusPinger uint16
+	queryPinger  uint16
+	nullPinger   time.Time
+
+	PingerEvent interface {
 		events.Event
-		isPingEvent()
+		writeReport(io.Writer) error
 	}
 
 	PingSucceeded struct {
-		events.Time
-		Latency time.Duration
+		When          time.Time
+		Latency       time.Duration
+		MaxPlayers    uint
+		OnlinePlayers uint
+		PlayerList    []string
 	}
 
 	PingFailed struct {
-		events.Time
+		When   time.Time
 		Reason error
 	}
+
+	PingDisabled time.Time
 )
 
 var (
-	PingSucceededType = events.Type("ping.succeeded")
-	PingFailedType    = events.Type("ping.failed")
-
-	ErrBothQueryAndStatusDisabled = errors.New("both status and query are disabled by server configuration")
-	ErrQueryDisabled              = errors.New("query is disabled by server configuration")
-	ErrQueryTimeout               = errors.New("server did not respond")
-
-	PingDisabled = MakePingFailed(ErrBothQueryAndStatusDisabled)
+	// Interface checks
+	_1 PingerEvent = (*PingSucceeded)(nil)
+	_2 PingerEvent = (*PingFailed)(nil)
+	_3 PingerEvent = PingDisabled(time.Now())
+	_4 pinger      = statusPinger(0)
+	_5 pinger      = queryPinger(0)
+	_6 pinger      = nullPinger(time.Now())
 )
 
 const (
@@ -76,19 +79,16 @@ func init() {
 
 func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {
 	return &Pinger{
-		propertyPath:   conf.ServerPropertiesPath(),
-		Dispatcher:     dispatcher,
-		pingerSettings: new(pingerSettings),
-		HandlerBase:    events.MakeHandlerBase(),
+		serverPropertiesPath: conf.AbsServerProperties(),
+		Dispatcher:           dispatcher,
+		HandlerBase:          events.MakeHandlerBase(),
 	}
 }
 
-func (*Pinger) GoString() string {
-	return "Pinger"
-}
-
 func (p *Pinger) Serve(ctx context.Context) error {
-	if err := p.readSettings(); err != nil {
+	pinger, err := p.newPinger()
+	if err != nil {
+		log.WithError(err).WithField("path", p.serverPropertiesPath).Error("pinger.config")
 		return err
 	}
 
@@ -99,105 +99,90 @@ func (p *Pinger) Serve(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case ev := <-p.HandlerBase:
-			p.HandleEvent(ev)
-		case <-ticker.C:
-			p.Ping()
+		case event := <-p.HandlerBase:
+			commands.OnCommand(OnlineCommand, event, p.handleOnlineCommand)
+		case when := <-ticker.C:
+			p.lastPing = pinger.Ping(when)
+			log.WithField("result", p.lastPing).Debug("pinger.update")
+			p.DispatchEvent(p.lastPing)
 		}
 	}
 }
 
-func (p *Pinger) Ping() {
-	var result PingEvent
-	if p.queryEnabled {
-		result = p.sendQuery()
-	} else if p.statusEnabled {
-		result = p.getStatus()
-	} else {
-		result = PingDisabled
+func (p *Pinger) newPinger() (pinger, error) {
+	props, err := properties.Load(p.serverPropertiesPath)
+	if err != nil {
+		return nil, err
 	}
-	p.DispatchEvent(result)
+
+	serverPort := uint16(props.Int("server-port", DefaultServerPort))
+
+	if props.Bool("enable-query", false) {
+		port := uint16(props.Int("query.port", int64(serverPort)))
+		return queryPinger(port), nil
+	}
+
+	if props.Bool("enable-status", false) {
+		return statusPinger(serverPort), nil
+	}
+
+	return nullPinger(time.Now()), nil
 }
 
-func (p *Pinger) sendQuery() PingEvent {
-	if response, err := mcstatusgo.BasicQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout); err == nil {
-		return PingSucceeded{events.Now(), response.Latency}
+func (p *Pinger) handleOnlineCommand(command *commands.Command) error {
+	return p.lastPing.writeReport(command.Reply)
+}
+
+func (p queryPinger) Ping(when time.Time) PingerEvent {
+	log.Debug("pinger.ping.fullQuery")
+	if response, err := mcstatusgo.FullQuery(ServerHost, uint16(p), ConnectionTimeout, ResponseTimeout); err == nil {
+		return &PingSucceeded{
+			When:          when,
+			Latency:       response.Latency,
+			MaxPlayers:    uint(response.Players.Max),
+			OnlinePlayers: uint(response.Players.Online),
+			PlayerList:    response.Players.PlayerList,
+		}
 	} else {
-		return MakePingFailed(err)
+		return &PingFailed{when, err}
 	}
 }
 
-func (p *Pinger) getStatus() PingEvent {
-	if status, err := mcstatusgo.Status(ServerHost, p.statusPort, ConnectionTimeout, ResponseTimeout); err == nil {
-		return PingSucceeded{events.Now(), status.Latency}
+func (p statusPinger) Ping(when time.Time) PingerEvent {
+	log.Debug("pinger.ping.status")
+	if response, err := mcstatusgo.Status(ServerHost, uint16(p), ConnectionTimeout, ResponseTimeout); err == nil {
+		return &PingSucceeded{
+			When:          when,
+			Latency:       response.Latency,
+			MaxPlayers:    uint(response.Players.Max),
+			OnlinePlayers: uint(response.Players.Online),
+			PlayerList:    nil,
+		}
 	} else {
-		return MakePingFailed(err)
+		return &PingFailed{when, err}
 	}
 }
 
-func (p *Pinger) HandleEvent(event events.Event) {
-	switch ev := event.(type) {
-	case commands.Command:
-		if ev.Name == OnlineCommand {
-			p.handleOnlineCommand(ev)
+func (p nullPinger) Ping(_ time.Time) PingerEvent {
+	return PingDisabled(p)
+}
+
+func (p *PingSucceeded) writeReport(writer io.Writer) error {
+	_, _ = fmt.Fprintf(writer, "Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
+	if len(p.PlayerList) > 0 {
+		for _, name := range p.PlayerList {
+			fmt.Fprintf(writer, "\n\n- %s", name)
 		}
 	}
-}
-
-func (p *Pinger) handleOnlineCommand(c commands.Command) {
-	defer c.Reply.Flush()
-	err := p.doOnlineQuery(c.Reply)
-	if err != nil {
-		_, _ = io.WriteString(c.Reply, "**server unreachable**")
-		log.WithError(err).Error("pinger.online")
-	}
-}
-
-func (p *Pinger) doOnlineQuery(writer io.Writer) error {
-	if !p.queryEnabled {
-		return ErrQueryDisabled
-	}
-	if response, err := mcstatusgo.FullQuery(ServerHost, p.queryPort, ConnectionTimeout, ResponseTimeout); err == nil {
-		_, _ = fmt.Fprintf(
-			writer,
-			"```\nOnline players (%d/%d):\n%s\n```",
-			response.Players.Online,
-			response.Players.Max,
-			strings.Join(response.Players.PlayerList, "\n"),
-		)
-		log.WithFields(log.Fields{
-			"latency":     response.Latency,
-			"player.list": response.Players.PlayerList,
-			"player.max":  response.Players.Max,
-		}).Info("pinger.online")
-		return nil
-	} else {
-		return err
-	}
-}
-
-func (p *Pinger) readSettings() error {
-	props, err := properties.Load(p.propertyPath)
-	if err != nil {
-		return fmt.Errorf("could not read %s: %w", p.propertyPath, err)
-	}
-	p.statusEnabled = props.Bool("enable-status", false)
-	p.statusPort = uint16(props.Int("server-port", DefaultServerPort))
-	p.queryEnabled = props.Bool("enable-query", false)
-	p.queryPort = uint16(props.Int("query.port", int64(p.statusPort)))
 	return nil
 }
 
-func (PingSucceeded) isPingEvent()         {}
-func (PingSucceeded) Type() events.Type    { return PingSucceededType }
-func (PingSucceeded) String() string       { return "ping succeeded" }
-func (s PingSucceeded) Fields() log.Fields { return map[string]interface{}{"latency": s.Latency} }
-
-func MakePingFailed(err error) PingFailed {
-	return PingFailed{events.Now(), err}
+func (p *PingFailed) writeReport(writer io.Writer) (err error) {
+	_, err = io.WriteString(writer, "**last ping failed**")
+	return
 }
 
-func (PingFailed) isPingEvent()         {}
-func (PingFailed) Type() events.Type    { return PingFailedType }
-func (e PingFailed) String() string     { return fmt.Sprintf("ping failed: %s", e.Reason) }
-func (e PingFailed) Fields() log.Fields { return map[string]interface{}{"error": e.Reason} }
+func (PingDisabled) writeReport(writer io.Writer) (err error) {
+	_, err = io.WriteString(writer, "**both status and query are disabled in server configuration**")
+	return
+}
