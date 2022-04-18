@@ -1,6 +1,7 @@
 package minecraft
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -9,76 +10,109 @@ import (
 const (
 	DefaultServerJar        = "server.jar"
 	DefaultServerProperties = "server.properties"
+	DefaultLog4JConf        = "mcvisor_log4J.xml"
 	JaveHomeEnvName         = "JAVA_HOME"
 )
 
 type Config struct {
-	BaseDir           string        `json:"-"`
-	WorkingDir        string        `json:"working_dir,omitempty"`
-	JavaHome          string        `json:"java_home,omitempty"`
-	JavaParameters    []string      `json:"java_parameters"`
-	ServerJar         string        `json:"server_jar,omitempty"`
-	ServerProperties  string        `json:"server_properties,omitempty"`
-	Parameters        []string      `json:"parameters"`
-	ServerHost        string        `json:"server_host" validate:"ip|hostname|fqdn"`
-	ServerPort        uint16        `json:"server_port"`
+	Server *ServerConfig `json:"server"`
+	Java   *JavaConfig   `json:"java"`
+}
+
+type ServerConfig struct {
+	BaseDir    string         `json:"-"`
+	WorkingDir string         `json:"working_dir,omitempty"`
+	Jar        string         `json:"jar,omitempty"`
+	Properties string         `json:"properties,omitempty"`
+	Log4JConf  string         `json:"log4jxml,omitempty"`
+	Options    []string       `json:"options"`
+	Network    *NetworkConfig `json:"network"`
+}
+
+type NetworkConfig struct {
+	Host              string        `json:"host,omitempty" validate:"omitempty,ip|hostname|fqdn"`
+	Port              uint16        `json:"port,omitempty"`
 	PingPeriod        time.Duration `json:"ping_interval"`
 	ConnectionTimeout time.Duration `json:"connection_timeout"`
 	ResponseTimeout   time.Duration `json:"response_timeout"`
 }
 
+type JavaConfig struct {
+	Home    string   `json:"home,omitempty" validate:"dir"`
+	Options []string `json:"options"`
+}
+
 func NewConfig(baseDir string) *Config {
 	baseDir = filepath.Clean(baseDir)
 	return &Config{
-		BaseDir:    baseDir,
-		WorkingDir: baseDir,
-		JavaHome:   os.Getenv(JaveHomeEnvName),
-		JavaParameters: []string{
-			"-XX:+UnlockExperimentalVMOptions",
-			"-XX:+UseG1GC",
-			"-XX:G1NewSizePercent=20",
-			"-XX:G1ReservePercent=20",
-			"-XX:MaxGCPauseMillis=50",
-			"-XX:G1HeapRegionSize=32M",
+		Java: &JavaConfig{
+			Home: os.Getenv(JaveHomeEnvName),
+			Options: []string{
+				"-XX:+UnlockExperimentalVMOptions",
+				"-XX:+UseG1GC",
+				"-XX:G1NewSizePercent=20",
+				"-XX:G1ReservePercent=20",
+				"-XX:MaxGCPauseMillis=50",
+				"-XX:G1HeapRegionSize=32M",
+			},
 		},
-		ServerJar:         DefaultServerJar,
-		ServerProperties:  DefaultServerProperties,
-		Parameters:        []string{"--nogui"},
-		ServerHost:        "localhost",
-		ServerPort:        25565,
-		PingPeriod:        10 * time.Second,
-		ConnectionTimeout: 5 * time.Second,
-		ResponseTimeout:   5 * time.Second,
+		Server: &ServerConfig{
+			BaseDir:    baseDir,
+			WorkingDir: baseDir,
+			Jar:        DefaultServerJar,
+			Properties: DefaultServerProperties,
+			Log4JConf:  DefaultLog4JConf,
+			Options:    []string{"--nogui"},
+			Network: &NetworkConfig{
+				PingPeriod:        10 * time.Second,
+				ConnectionTimeout: 5 * time.Second,
+				ResponseTimeout:   5 * time.Second,
+			},
+		},
 	}
 }
 
-func (c Config) AbsWorkingDir() string {
-	return absPath(c.BaseDir, c.WorkingDir)
-}
-
-func (c Config) AbsJavaHome() string {
-	return absPath(c.BaseDir, c.JavaHome)
-}
-
-func (c Config) Command() string {
-	return filepath.Join(c.AbsJavaHome(), JavaCmd)
-}
-
-func (c Config) Arguments() []string {
-	args := c.JavaParameters[:]
-	args = append(args, "-jar", c.ServerJar)
-	return append(args, c.Parameters...)
+func (c Config) Command() []string {
+	return append(c.Java.Command(), c.Server.Command()...)
 }
 
 func (c Config) Env() []string {
-	return append(
-		os.Environ(),
-		JaveHomeEnvName+"="+c.AbsJavaHome(),
-	)
+	return []string{JaveHomeEnvName + "=" + c.Java.Home}
 }
 
-func (c Config) AbsServerProperties() string {
-	return absPath(c.AbsWorkingDir(), c.ServerProperties)
+func (c Config) WorkingDir() string {
+	return c.Server.AbsWorkingDir()
+}
+
+func (c JavaConfig) AbsJavaCommand() string {
+	return filepath.Join(c.Home, JavaCmd)
+}
+
+func (c JavaConfig) Command() []string {
+	return append([]string{c.AbsJavaCommand()}, c.Options...)
+}
+
+func (c ServerConfig) AbsWorkingDir() string {
+	return absPath(c.BaseDir, c.WorkingDir)
+}
+
+func (c ServerConfig) AbsLog4JConf() string {
+	return absPath(c.AbsWorkingDir(), c.Log4JConf)
+}
+
+func (c ServerConfig) AbsServerProperties() string {
+	return absPath(c.AbsWorkingDir(), c.Properties)
+}
+
+func (c ServerConfig) Command() []string {
+	return append(
+		[]string{
+			fmt.Sprintf("-Dlog4j.configurationFile=%s", c.Log4JConf),
+			"-jar",
+			c.Jar,
+		},
+		c.Options...,
+	)
 }
 
 func absPath(base, path string) string {

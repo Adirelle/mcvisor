@@ -113,7 +113,7 @@ func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture
 	controller := minecraft.NewController(control, dispatcher)
 	supervisor.Add(controller)
 
-	pinger := minecraft.NewPinger(conf.Minecraft, dispatcher)
+	pinger := minecraft.NewPinger(conf.Minecraft.Server, dispatcher)
 	supervisor.Add(pinger)
 
 	return supervisor

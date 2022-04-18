@@ -16,7 +16,7 @@ import (
 
 type (
 	Pinger struct {
-		*Config
+		*ServerConfig
 		*events.Dispatcher
 		lastPing PingerEvent
 		commands chan *commands.Command
@@ -27,11 +27,11 @@ type (
 	}
 
 	statusPingStrategy struct {
-		*Config
+		*NetworkConfig
 	}
 
 	queryPingSrategy struct {
-		*Config
+		*NetworkConfig
 		QueryPort uint16
 	}
 
@@ -76,11 +76,11 @@ func init() {
 	commands.Register(OnlineCommand, "list online players", discord.QueryCategory)
 }
 
-func NewPinger(config *Config, dispatcher *events.Dispatcher) *Pinger {
+func NewPinger(config *ServerConfig, dispatcher *events.Dispatcher) *Pinger {
 	return &Pinger{
-		Config:     config,
-		Dispatcher: dispatcher,
-		commands:   events.MakeHandler[*commands.Command](),
+		ServerConfig: config,
+		Dispatcher:   dispatcher,
+		commands:     events.MakeHandler[*commands.Command](),
 	}
 }
 
@@ -93,7 +93,7 @@ func (p *Pinger) Serve(ctx context.Context) error {
 
 	defer p.Subscribe(p.commands).Cancel()
 
-	ticker := time.NewTicker(p.PingPeriod)
+	ticker := time.NewTicker(p.Network.PingPeriod)
 	defer ticker.Stop()
 
 	for {
@@ -118,15 +118,20 @@ func (p *Pinger) getPingStrategy() (pingStrategy, error) {
 		return nil, err
 	}
 
-	p.ServerPort = uint16(props.Int("server-port", int64(p.ServerPort)))
+	if p.Network.Host == "" {
+		p.Network.Host = props.String("server-ip", "localhost")
+	}
+	if p.Network.Port == 0 {
+		p.Network.Port = uint16(props.Int("server-port", 25565))
+	}
 
 	if props.Bool("enable-query", false) {
-		port := uint16(props.Int("query.port", int64(p.ServerPort)))
-		return &queryPingSrategy{p.Config, port}, nil
+		port := uint16(props.Int("query.port", int64(p.Network.Port)))
+		return &queryPingSrategy{p.Network, port}, nil
 	}
 
 	if props.Bool("enable-status", false) {
-		return &statusPingStrategy{p.Config}, nil
+		return &statusPingStrategy{p.Network}, nil
 	}
 
 	return nullPingStrategy(time.Now()), nil
@@ -134,7 +139,7 @@ func (p *Pinger) getPingStrategy() (pingStrategy, error) {
 
 func (p *queryPingSrategy) Ping(when time.Time) PingerEvent {
 	log.Debug("pinger.ping.fullQuery")
-	if response, err := mcstatusgo.FullQuery(p.ServerHost, p.QueryPort, p.ConnectionTimeout, p.ResponseTimeout); err == nil {
+	if response, err := mcstatusgo.FullQuery(p.Host, p.QueryPort, p.ConnectionTimeout, p.ResponseTimeout); err == nil {
 		return &PingSucceeded{
 			When:          when,
 			Latency:       response.Latency,
@@ -149,7 +154,7 @@ func (p *queryPingSrategy) Ping(when time.Time) PingerEvent {
 
 func (p *statusPingStrategy) Ping(when time.Time) PingerEvent {
 	log.Debug("pinger.ping.status")
-	if response, err := mcstatusgo.Status(p.ServerHost, p.ServerPort, p.ConnectionTimeout, p.ResponseTimeout); err == nil {
+	if response, err := mcstatusgo.Status(p.Host, p.Port, p.ConnectionTimeout, p.ResponseTimeout); err == nil {
 		return &PingSucceeded{
 			When:          when,
 			Latency:       response.Latency,
@@ -183,7 +188,7 @@ func (p *PingSucceeded) writeReport(writer io.Writer) error {
 	_, _ = fmt.Fprintf(writer, "Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
 	if len(p.PlayerList) > 0 {
 		for _, name := range p.PlayerList {
-			fmt.Fprintf(writer, "\n\n- %s", name)
+			fmt.Fprintf(writer, "\n- %s", name)
 		}
 	}
 	return nil

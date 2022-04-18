@@ -2,4 +2,4 @@
 
 package minecraft
 
-const JavaCmd = "bin\\java.exe"
+const JavaCmd string = "bin\\java.exe"
