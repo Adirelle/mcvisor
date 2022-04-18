@@ -156,15 +156,15 @@ func (c *dispatch) Apply(d *Dispatcher, ctx context.Context) {
 	for handlerType, handlers := range d.handlers {
 		if eventType.AssignableTo(handlerType) {
 			for _, handler := range handlers {
+				sync.Add(1)
 				go func(handler reflect.Value) {
-					sync.Add(1)
 					defer sync.Done()
 					chosen, _, _ := reflect.Select([]reflect.SelectCase{
 						{Dir: reflect.SelectSend, Chan: handler, Send: eventValue},
 						{Dir: reflect.SelectRecv, Chan: doneChan},
 					})
 					if chosen != 0 {
-						logger.WithField("handler", handler.Interface()).Warn("event.dispatch.dropper")
+						logger.WithField("handler", handler.Interface()).Warn("event.dispatch.dropped")
 					}
 				}(handler)
 			}
