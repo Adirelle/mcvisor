@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
@@ -100,9 +99,6 @@ func SetUpLogging(conf *Logging, supervisor *suture.Supervisor) {
 
 func NewMinecraftSupervisor(conf *Config, dispatcher events.Dispatcher) *suture.Supervisor {
 	supervisor := suture.NewSimple("minecraft")
-
-	supervisor.Add(commands.EventHandler)
-	dispatcher.Add(commands.EventHandler)
 
 	status := minecraft.NewStatusMonitor(dispatcher)
 	supervisor.Add(status)

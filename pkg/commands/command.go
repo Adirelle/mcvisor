@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/Adirelle/mcvisor/pkg/events"
-	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/apex/log"
 )
 
@@ -17,12 +16,12 @@ type (
 	Definition struct {
 		Name        Name
 		Description string
-		permissions.Category
+		Category
 	}
 
 	Command struct {
 		*Definition
-		permissions.Actor
+		Actor
 		Arguments []string
 		Reply     *bufio.Writer
 	}
@@ -36,8 +35,9 @@ var (
 	ErrNoCommandPrefix = errors.New("missing command prefix")
 	ErrUnknownCommand  = errors.New("unknown command")
 
-	// interface check
+	// interface checks
 	_ events.Event = (*Command)(nil)
+	_ log.Fielder  = (*Command)(nil)
 )
 
 func (n Name) String() string {
@@ -64,29 +64,30 @@ func (c *Command) String() string {
 	return strings.Join(append([]string{string(c.Name)}, c.Arguments...), " ")
 }
 
-func (c *Command) IsAllowed() bool {
-	return c.Permission().Allow(c.Actor)
-}
-
 func (c *Command) Fields() log.Fields {
-	return map[string]interface{}{
+	fields := log.Fields{
 		"command": c.Name,
 		"args":    c.Arguments,
-		"actor":   c.Actor.DescribeActor(),
 	}
+	if actor, isFielder := c.Actor.(log.Fielder); isFielder {
+		for key, value := range actor.Fields() {
+			fields[key] = value
+		}
+	}
+	return fields
 }
 
-func Parse(line string) (*Command, error) {
+func NewCommandFromString(line string, actor Actor) (*Command, error) {
 	if line[0] != byte(Prefix) {
 		return nil, ErrNoCommandPrefix
 	}
 
 	words := strings.Split(line[1:], " ")
 	name := Name(words[0])
-	def, found := commands[name]
+	def, found := Definitions[name]
 	if !found {
 		return nil, ErrUnknownCommand
 	}
 
-	return &Command{&def, nil, words[1:], nil}, nil
+	return &Command{def, actor, words[1:], nil}, nil
 }

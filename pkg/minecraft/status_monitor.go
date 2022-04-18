@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
-	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/apex/log"
 )
 
@@ -36,7 +36,7 @@ const (
 )
 
 func init() {
-	commands.Register(StatusCommand, "show server status", permissions.QueryCategory)
+	commands.Register(StatusCommand, "show server status", discord.QueryCategory)
 }
 
 func NewStatusMonitor(dispatcher events.Dispatcher) *StatusMonitor {

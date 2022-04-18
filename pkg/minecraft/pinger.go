@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
-	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/apex/log"
 	properties "github.com/dmotylev/goproperties"
 	"github.com/millkhan/mcstatusgo/v2"
@@ -74,7 +74,7 @@ var (
 )
 
 func init() {
-	commands.Register(OnlineCommand, "list online players", permissions.QueryCategory)
+	commands.Register(OnlineCommand, "list online players", discord.QueryCategory)
 }
 
 func NewPinger(conf Config, dispatcher events.Dispatcher) *Pinger {

@@ -55,7 +55,7 @@ func NewConfig(path string) (c *Config) {
 	return &Config{
 		Path:      path,
 		Minecraft: minecraft.NewConfig(filepath.Dir(path)),
-		Discord:   &discord.Config{},
+		Discord:   discord.NewConfig(),
 		Logging:   NewLogging(),
 	}
 }

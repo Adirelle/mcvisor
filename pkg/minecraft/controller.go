@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
-	"github.com/Adirelle/mcvisor/pkg/permissions"
 	"github.com/apex/log"
 	"github.com/thejerf/suture/v4"
 )
@@ -57,10 +57,10 @@ var (
 )
 
 func init() {
-	commands.Register(StartCommand, "start the server", permissions.ControlCategory)
-	commands.Register(StopCommand, "stop the server", permissions.ControlCategory)
-	commands.Register(RestartCommand, "restart the server", permissions.ControlCategory)
-	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", permissions.AdminCategory)
+	commands.Register(StartCommand, "start the server", discord.ControlCategory)
+	commands.Register(StopCommand, "stop the server", discord.ControlCategory)
+	commands.Register(RestartCommand, "restart the server", discord.ControlCategory)
+	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", discord.AdminCategory)
 }
 
 func NewController(control Control, dispatcher events.Dispatcher) *Controller {
