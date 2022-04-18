@@ -137,8 +137,9 @@ func (s *unsubscribe) Apply(d *Dispatcher, _ context.Context) {
 func (c *dispatch) Apply(d *Dispatcher, ctx context.Context) {
 	defer close(c.Done)
 
-	// dispatchCtx, cancel := context.WithTimeout(ctx, d.DispatchTimeout)
-	// defer cancel()
+	dispatchCtx, cancel := context.WithTimeout(ctx, d.DispatchTimeout)
+	defer cancel()
+	doneChan := reflect.ValueOf(dispatchCtx.Done())
 
 	eventValue := reflect.ValueOf(c.Event)
 	eventType := eventValue.Type()
@@ -158,7 +159,13 @@ func (c *dispatch) Apply(d *Dispatcher, ctx context.Context) {
 				go func(handler reflect.Value) {
 					sync.Add(1)
 					defer sync.Done()
-					handler.Send(eventValue)
+					chosen, _, _ := reflect.Select([]reflect.SelectCase{
+						{Dir: reflect.SelectSend, Chan: handler, Send: eventValue},
+						{Dir: reflect.SelectRecv, Chan: doneChan},
+					})
+					if chosen != 0 {
+						logger.WithField("handler", handler.Interface()).Warn("event.dispatch.dropper")
+					}
 				}(handler)
 			}
 		}
