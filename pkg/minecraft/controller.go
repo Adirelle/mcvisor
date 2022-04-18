@@ -27,8 +27,6 @@ type (
 		Start()
 		Stop()
 	}
-
-	systemShutdown int
 )
 
 const (
@@ -51,7 +49,9 @@ var (
 		ShutdownCommand: ShutdownTarget,
 	}
 
-	SystemShutdown = systemShutdown(0)
+	SystemShutdown = &commands.Command{
+		Definition: &commands.Definition{Name: ShutdownCommand, Description: "inner shutdown", Category: discord.ControlCategory},
+	}
 )
 
 func init() {
