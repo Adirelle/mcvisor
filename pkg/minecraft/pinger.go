@@ -59,18 +59,18 @@ type (
 	PingDisabled time.Time
 )
 
-var (
-	// Interface checks
-	_1 PingerEvent = (*PingSucceeded)(nil)
-	_2 PingerEvent = (*PingFailed)(nil)
-	_3 PingerEvent = PingDisabled(time.Now())
-	_4 pinger      = statusPinger(0)
-	_5 pinger      = queryPinger(0)
-	_6 pinger      = nullPinger(time.Now())
-)
-
 const (
 	OnlineCommand commands.Name = "online"
+)
+
+var (
+	// Interface checks
+	_ PingerEvent = (*PingSucceeded)(nil)
+	_ PingerEvent = (*PingFailed)(nil)
+	_ PingerEvent = PingDisabled(time.Now())
+	_ pinger      = statusPinger(0)
+	_ pinger      = queryPinger(0)
+	_ pinger      = nullPinger(time.Now())
 )
 
 func init() {

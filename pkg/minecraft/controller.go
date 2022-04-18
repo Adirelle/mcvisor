@@ -53,7 +53,7 @@ var (
 
 	SystemShutdown events.Event = systemShutdown(0)
 
-	_10 events.Event = (*TargetChanged)(nil)
+	_ events.Event = (*TargetChanged)(nil)
 )
 
 func init() {
