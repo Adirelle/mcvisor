@@ -3,6 +3,7 @@ package minecraft
 import (
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -12,13 +13,18 @@ const (
 )
 
 type Config struct {
-	BaseDir          string   `json:"-"`
-	WorkingDir       string   `json:"working_dir,omitempty"`
-	JavaHome         string   `json:"java_home,omitempty"`
-	JavaParameters   []string `json:"java_parameters"`
-	ServerJar        string   `json:"server_jar,omitempty"`
-	ServerProperties string   `json:"server_properties,omitempty"`
-	Parameters       []string `json:"parameters"`
+	BaseDir           string        `json:"-"`
+	WorkingDir        string        `json:"working_dir,omitempty"`
+	JavaHome          string        `json:"java_home,omitempty"`
+	JavaParameters    []string      `json:"java_parameters"`
+	ServerJar         string        `json:"server_jar,omitempty"`
+	ServerProperties  string        `json:"server_properties,omitempty"`
+	Parameters        []string      `json:"parameters"`
+	ServerHost        string        `json:"server_host" validate:"ip|hostname|fqdn"`
+	ServerPort        uint16        `json:"server_port"`
+	PingPeriod        time.Duration `json:"ping_interval"`
+	ConnectionTimeout time.Duration `json:"connection_timeout"`
+	ResponseTimeout   time.Duration `json:"response_timeout"`
 }
 
 func NewConfig(baseDir string) *Config {
@@ -35,9 +41,14 @@ func NewConfig(baseDir string) *Config {
 			"-XX:MaxGCPauseMillis=50",
 			"-XX:G1HeapRegionSize=32M",
 		},
-		ServerJar:        DefaultServerJar,
-		ServerProperties: DefaultServerProperties,
-		Parameters:       []string{"--nogui"},
+		ServerJar:         DefaultServerJar,
+		ServerProperties:  DefaultServerProperties,
+		Parameters:        []string{"--nogui"},
+		ServerHost:        "localhost",
+		ServerPort:        25565,
+		PingPeriod:        10 * time.Second,
+		ConnectionTimeout: 5 * time.Second,
+		ResponseTimeout:   5 * time.Second,
 	}
 }
 

@@ -12,9 +12,13 @@ import (
 
 type (
 	Controller struct {
-		events.HandlerBase
-		events.Dispatcher
-		ctl Control
+		dispatcher *events.Dispatcher
+		ctl        Control
+		target     Target
+		status     Status
+
+		commands chan *commands.Command
+		statuses chan Status
 	}
 
 	Target string
@@ -22,10 +26,6 @@ type (
 	Control interface {
 		Start()
 		Stop()
-	}
-
-	TargetChanged struct {
-		Target
 	}
 
 	systemShutdown int
@@ -51,9 +51,7 @@ var (
 		ShutdownCommand: ShutdownTarget,
 	}
 
-	SystemShutdown events.Event = systemShutdown(0)
-
-	_ events.Event = (*TargetChanged)(nil)
+	SystemShutdown = systemShutdown(0)
 )
 
 func init() {
@@ -63,82 +61,82 @@ func init() {
 	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", discord.AdminCategory)
 }
 
-func NewController(control Control, dispatcher events.Dispatcher) *Controller {
-	c := &Controller{
-		HandlerBase: events.MakeHandlerBase(),
-		Dispatcher:  dispatcher,
-		ctl:         control,
+func NewController(control Control, dispatcher *events.Dispatcher) *Controller {
+	return &Controller{
+		dispatcher: dispatcher,
+		ctl:        control,
+		target:     StartTarget,
+		status:     Stopped,
+		commands:   events.MakeHandler[*commands.Command](),
+		statuses:   events.MakeHandler[Status](),
 	}
-	dispatcher.Add(c)
-	return c
 }
 
 func (c *Controller) Serve(ctx context.Context) error {
-	status := Stopped
-	target := StopTarget
-	newStatus := status
-	newTarget := StartTarget
+	defer c.dispatcher.Subscribe(c.commands).Cancel()
+	defer c.dispatcher.Subscribe(c.statuses).Cancel()
+
 	done := ctx.Done()
 
 	for {
-		if newStatus != status || newTarget != target {
-			if newStatus != status {
-				status = newStatus
-				log.WithField("status", status).Debug("controller.status")
-			}
-			if newTarget != target {
-				target = newTarget
-				log.WithField("target", target).Debug("controller.target")
-				c.Dispatch(&TargetChanged{target})
-			}
-
-			switch target {
-			case RestartTarget:
-				if status == Stopped {
-					newTarget = StartTarget
-					c.ctl.Start()
-				} else if status != Stopping {
-					c.ctl.Stop()
-				}
-			case StartTarget:
-				if status == Stopped {
-					c.ctl.Start()
-				}
-			case ShutdownTarget:
-				if status == Stopped {
-					return suture.ErrTerminateSupervisorTree
-				}
-				fallthrough
-			case StopTarget:
-				if status != Stopped && status != Stopping {
-					c.ctl.Stop()
-				}
-			}
+		if err := c.tick(); err != nil {
+			return err
 		}
 
 		select {
-		case event := <-c.HandlerBase:
-			switch typedEvent := event.(type) {
-			case StatusChanged:
-				newStatus = typedEvent.Status()
-			case systemShutdown:
-				newTarget = ShutdownTarget
-			case *commands.Command:
-				if target, found := commandTargets[typedEvent.Name]; found {
-					newTarget = target
-				}
+		case cmd := <-c.commands:
+			if newTarget, found := commandTargets[cmd.Name]; found {
+				c.setTarget(newTarget)
 			}
+		case newStatus := <-c.statuses:
+			c.setStatus(newStatus)
 		case <-done:
 			done = nil
-			newTarget = ShutdownTarget
+			c.setTarget(ShutdownTarget)
 		}
 	}
 }
 
-func (t *TargetChanged) Fields() log.Fields {
-	return log.Fields{"target": t.Target}
+func (c *Controller) tick() error {
+	switch c.target {
+	case RestartTarget:
+		if c.status == Stopped {
+			c.ctl.Start()
+			c.setTarget(StartTarget)
+		} else if c.status != Stopping {
+			c.ctl.Stop()
+		}
+	case StartTarget:
+		if c.status == Stopped {
+			c.ctl.Start()
+		}
+	case ShutdownTarget:
+		if c.status == Stopped {
+			return suture.ErrTerminateSupervisorTree
+		}
+		fallthrough
+	case StopTarget:
+		if c.status != Stopped && c.status != Stopping {
+			c.ctl.Stop()
+		}
+	}
+	return nil
 }
 
-func (systemShutdown) Fields() log.Fields {
-	return nil
+func (c *Controller) setTarget(newTarget Target) {
+	if newTarget == c.target {
+		return
+	}
+	c.target = newTarget
+	log.WithField("target", newTarget).Debug("controller.target")
+	c.dispatcher.Dispatch(newTarget)
+	return
+}
+
+func (c *Controller) setStatus(newStatus Status) {
+	if newStatus == c.status {
+		return
+	}
+	c.status = newStatus
+	log.WithField("status", newStatus).Debug("controller.status")
 }

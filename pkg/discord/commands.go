@@ -8,6 +8,7 @@ import (
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/apex/log"
 	"github.com/bwmarrin/discordgo"
+	"golang.org/x/exp/slices"
 )
 
 type (
@@ -27,23 +28,14 @@ func init() {
 	commands.Register(PermsCommand, "show current command permissions", AdminCategory)
 }
 
-func (b *Bot) onMessage(session *discordgo.Session, message *discordgo.MessageCreate) {
-	if message.Author.ID != b.State.User.ID && len(message.Content) > 1 && b.listenToChannel(Snowflake(message.ChannelID)) {
-		b.handleCommandMessage(session, message.Message)
+func (b *Bot) HandleMessage(message *discordgo.Message) {
+	if message.Author.ID == b.State.User.ID ||
+		len(message.Content) < 2 ||
+		!slices.Contains(b.ChannelIDs, Snowflake(message.ChannelID)) {
+		return
 	}
-}
 
-func (b *Bot) listenToChannel(channelId Snowflake) bool {
-	for _, id := range b.ChannelIDs {
-		if id == channelId {
-			return true
-		}
-	}
-	return false
-}
-
-func (b *Bot) handleCommandMessage(session *discordgo.Session, message *discordgo.Message) {
-	replyWriter := replyWriter{session, message}
+	replyWriter := replyWriter{b.Session, message}
 	writer := bufio.NewWriter(replyWriter)
 	actor := &messageActor{message}
 	var command *commands.Command
@@ -68,7 +60,7 @@ func (b *Bot) handleCommandMessage(session *discordgo.Session, message *discordg
 	command.Reply = writer
 
 	if b.Permissions.IsAllowed(command.Category, command.Actor) {
-		b.dispatcher.Dispatch(command)
+		<-b.dispatcher.Dispatch(command)
 	} else {
 		err = commands.ErrPermissionDenied
 	}

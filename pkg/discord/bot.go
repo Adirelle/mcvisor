@@ -13,48 +13,49 @@ import (
 type (
 	Bot struct {
 		Config
-		events.HandlerBase
 		*discordgo.Session
-		dispatcher events.Dispatcher
+		dispatcher *events.Dispatcher
+		commands   chan *commands.Command
+		messages   chan *discordgo.Message
 	}
 )
 
-func NewBot(config Config, dispatcher events.Dispatcher) *Bot {
-	b := &Bot{
-		Config:      config,
-		dispatcher:  dispatcher,
-		HandlerBase: events.MakeHandlerBase(),
+func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
+	return &Bot{
+		Config:     config,
+		dispatcher: dispatcher,
+		commands:   events.MakeHandler[*commands.Command](),
+		messages:   events.MakeHandler[*discordgo.Message](),
 	}
-	dispatcher.Add(b)
-	fmt.Printf("%#v", config.Permissions)
-	return b
-}
-
-func (b *Bot) GoString() string {
-	return "Discord Bot"
 }
 
 func (b *Bot) Serve(ctx context.Context) (err error) {
-	err = b.connect()
+	err = b.connect(ctx)
 	if err != nil {
 		return fmt.Errorf("could not connect to Discord: %w", err)
 	}
 	defer b.disconnect()
 
-	return events.Serve(b.HandlerBase, b.HandleEvent, ctx)
-}
+	defer b.dispatcher.Subscribe(b.commands).Cancel()
 
-func (b *Bot) HandleEvent(event events.Event) {
-	// if notif, ok := event.(Notification); ok && b.Session != nil {
-	// 	b.handleNotification(notif)
-	// }
-	switch {
-	case commands.OnCommand(PermsCommand, event, b.HandlePermCommand),
-		commands.OnCommand(HelpCommand, event, b.HandleHelpCommand):
+	for {
+		select {
+		case cmd := <-b.commands:
+			switch cmd.Name {
+			case PermsCommand:
+				b.HandlePermCommand(cmd)
+			case HelpCommand:
+				b.HandleHelpCommand(cmd)
+			}
+		case msg := <-b.messages:
+			b.HandleMessage(msg)
+		case <-ctx.Done():
+			return nil
+		}
 	}
 }
 
-func (b *Bot) connect() (err error) {
+func (b *Bot) connect(ctx context.Context) (err error) {
 	if b.Session != nil {
 		return
 	}
@@ -63,7 +64,12 @@ func (b *Bot) connect() (err error) {
 	if b.Session, err = discordgo.New("Bot " + b.Config.Token.Reveal()); err == nil {
 		b.Identify.Intents = discordgo.IntentsGuildMessages
 		b.AddHandler(b.onReady)
-		b.AddHandler(b.onMessage)
+		b.AddHandler(func(_ *discordgo.Session, message *discordgo.MessageCreate) {
+			select {
+			case b.messages <- message.Message:
+			case <-ctx.Done():
+			}
+		})
 
 		err = b.Open()
 	}
@@ -74,7 +80,7 @@ func (b *Bot) connect() (err error) {
 	return
 }
 
-func (b *Bot) onReady(session *discordgo.Session, ready *discordgo.Ready) {
+func (b *Bot) onReady(_ *discordgo.Session, ready *discordgo.Ready) {
 	log.WithField("username", ready.User.Username).Info("discord.ready")
 }
 

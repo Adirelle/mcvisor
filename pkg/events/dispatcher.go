@@ -11,84 +11,157 @@ import (
 )
 
 type (
-	Dispatcher interface {
-		Dispatch(Event)
-		Add(Handler)
+	Done <-chan struct{}
+
+	Dispatcher struct {
+		DispatchTimeout time.Duration
+
+		ctl      chan command
+		handlers map[reflect.Type][]reflect.Value
 	}
 
-	AsyncDispatcher struct {
-		ctl      chan command
-		handlers []Handler
+	Subscription struct {
+		handler   reflect.Value
+		eventType reflect.Type
+		cancel    func()
 	}
 
 	command interface {
-		apply(context.Context, *AsyncDispatcher)
+		Apply(*Dispatcher, context.Context)
 	}
 
-	addCommand      struct{ Handler }
-	dispatchCommand struct {
-		Event
-		done chan struct{}
+	subscribe struct {
+		*Subscription
+		Done chan struct{}
+	}
+
+	unsubscribe struct {
+		*Subscription
+		Done chan struct{}
+	}
+
+	dispatch struct {
+		Event interface{}
+		Done  chan struct{}
 	}
 )
 
-var DispatchChanCapacity = 20
+var (
+	DispatcherCapacity     = 20
+	DefaultDispatchTimeout = 10 * time.Second
+	HandlerCapacity        = 10
+)
 
-func NewAsyncDispatcher() *AsyncDispatcher {
-	return &AsyncDispatcher{ctl: make(chan command, DispatchChanCapacity)}
+func MakeHandler[E any]() chan E {
+	return make(chan E, HandlerCapacity)
 }
 
-func (d *AsyncDispatcher) Serve(ctx context.Context) error {
+func NewDispatcher() *Dispatcher {
+	return &Dispatcher{
+		DispatchTimeout: DefaultDispatchTimeout,
+		ctl:             make(chan command, DispatcherCapacity),
+		handlers:        make(map[reflect.Type][]reflect.Value),
+	}
+}
+
+func (d *Dispatcher) Serve(ctx context.Context) error {
 	for {
 		select {
 		case cmd := <-d.ctl:
-			cmd.apply(ctx, d)
+			cmd.Apply(d, ctx)
 		case <-ctx.Done():
 			return nil
 		}
 	}
 }
 
-func (d *AsyncDispatcher) GoString() string {
-	return fmt.Sprintf("Dispatcher(%d, %d/%d)", len(d.handlers), len(d.ctl), cap(d.ctl))
+func (d *Dispatcher) Subscribe(handler interface{}) *Subscription {
+	sub := newSubscription(handler)
+	sub.cancel = func() {
+		cmd := &unsubscribe{sub, make(chan struct{})}
+		d.ctl <- cmd
+		<-cmd.Done
+	}
+
+	cmd := &subscribe{sub, make(chan struct{})}
+	d.ctl <- cmd
+	<-cmd.Done
+	return sub
 }
 
-func (d AsyncDispatcher) Add(handler Handler) {
-	d.ctl <- &addCommand{handler}
+func (d *Dispatcher) Dispatch(event interface{}) Done {
+	cmd := &dispatch{event, make(chan struct{})}
+	d.ctl <- cmd
+	return cmd.Done
 }
 
-func (c *addCommand) apply(_ context.Context, d *AsyncDispatcher) {
-	d.handlers = append(d.handlers, c.Handler)
+func newSubscription(handler interface{}) *Subscription {
+	handlerValue := reflect.ValueOf(handler)
+	handlerType := handlerValue.Type()
+	if handlerType.Kind() != reflect.Chan {
+		panic("handler must be a channel")
+	}
+
+	return &Subscription{
+		handler:   handlerValue,
+		eventType: handlerType.Elem(),
+	}
 }
 
-func (d AsyncDispatcher) Dispatch(events Event) {
-	done := make(chan struct{})
-	d.ctl <- &dispatchCommand{events, done}
-	<-done
+func (s *Subscription) Cancel() {
+	s.cancel()
 }
 
-func (c *dispatchCommand) apply(ctx context.Context, d *AsyncDispatcher) {
-	defer close(c.done)
+func (s *subscribe) Apply(d *Dispatcher, _ context.Context) {
+	defer close(s.Done)
+	d.handlers[s.eventType] = append(d.handlers[s.eventType], s.handler)
+}
 
-	dispatchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+func (s *unsubscribe) Apply(d *Dispatcher, _ context.Context) {
+	defer close(s.Done)
+	handlers, found := d.handlers[s.eventType]
+	if !found {
+		return
+	}
 
-	logger := log.WithFields(c.Event).WithField("type", reflect.TypeOf(c.Event).String())
+	j := 0
+	for i, l := 0, len(handlers); i < l; i++ {
+		if h := handlers[i]; h != s.handler {
+			handlers[j] = h
+			j++
+		}
+	}
+	d.handlers[s.eventType] = handlers[:j]
+}
+
+func (c *dispatch) Apply(d *Dispatcher, ctx context.Context) {
+	defer close(c.Done)
+
+	// dispatchCtx, cancel := context.WithTimeout(ctx, d.DispatchTimeout)
+	// defer cancel()
+
+	eventValue := reflect.ValueOf(c.Event)
+	eventType := eventValue.Type()
+
+	logger := log.WithField("type", eventType.String())
+	if fielder, isFielder := c.Event.(log.Fielder); isFielder {
+		logger = logger.WithFields(fielder)
+	} else {
+		logger = logger.WithField("event", fmt.Sprintf("%#v", c.Event))
+	}
 	logger.Debug("event.dispatch")
 
-	all := &sync.WaitGroup{}
-	for _, handler := range d.handlers {
-		all.Add(1)
-
-		go func(handler Handler) {
-			defer all.Done()
-			select {
-			case handler.EventC() <- c.Event:
-			case <-dispatchCtx.Done():
-				logger.WithField("handler", handler).Error("event.dispatch.dropped")
+	sync := &sync.WaitGroup{}
+	for handlerType, handlers := range d.handlers {
+		if eventType.AssignableTo(handlerType) {
+			for _, handler := range handlers {
+				go func(handler reflect.Value) {
+					sync.Add(1)
+					defer sync.Done()
+					handler.Send(eventValue)
+				}(handler)
 			}
-		}(handler)
-
+		}
 	}
-	all.Wait()
+	sync.Wait()
 }

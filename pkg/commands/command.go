@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/apex/log"
 )
 
@@ -36,28 +35,11 @@ var (
 	ErrUnknownCommand  = errors.New("unknown command")
 
 	// interface checks
-	_ events.Event = (*Command)(nil)
-	_ log.Fielder  = (*Command)(nil)
+	_ log.Fielder = (*Command)(nil)
 )
 
 func (n Name) String() string {
 	return fmt.Sprintf("%c%s", Prefix, string(n))
-}
-
-func OnCommand(name Name, event events.Event, handler CommandHandlerFunc) bool {
-	if cmd, ok := event.(*Command); ok && cmd.Name == name {
-		defer cmd.Reply.Flush()
-		logger := log.WithFields(cmd)
-		logger.Debug("command.handle")
-		if err := handler(cmd); err == nil {
-			logger.Info("command.success")
-		} else {
-			fmt.Fprintf(cmd.Reply, "**%s**", err)
-			logger.WithError(err).Warn("command.error")
-		}
-		return true
-	}
-	return false
 }
 
 func (c *Command) String() string {

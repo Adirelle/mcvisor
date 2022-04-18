@@ -7,6 +7,7 @@ import (
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/apex/log"
 	"github.com/bwmarrin/discordgo"
+	"golang.org/x/exp/slices"
 )
 
 type (
@@ -145,14 +146,7 @@ func (a *messageActor) IsUser(userID Snowflake) bool {
 }
 
 func (a *messageActor) HasRole(roleID Snowflake) bool {
-	if a.Member != nil {
-		for _, r := range a.Member.Roles {
-			if r == string(roleID) {
-				return true
-			}
-		}
-	}
-	return false
+	return a.Member != nil && slices.Contains(a.Member.Roles, string(roleID))
 }
 
 func (a *messageActor) InChannel(channelID Snowflake) bool {

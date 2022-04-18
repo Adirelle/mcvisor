@@ -60,7 +60,7 @@ func main() {
 	}
 }
 
-func NewMainSupervisor(conf *Config) (*suture.Supervisor, events.Dispatcher) {
+func NewMainSupervisor(conf *Config) (*suture.Supervisor, *events.Dispatcher) {
 	supervisor := suture.New("main", suture.Spec{
 		EventHook: suture.EventHook(func(event suture.Event) {
 			log.
@@ -72,7 +72,7 @@ func NewMainSupervisor(conf *Config) (*suture.Supervisor, events.Dispatcher) {
 
 	SetUpLogging(conf.Logging, supervisor)
 
-	dispatcher := events.NewAsyncDispatcher()
+	dispatcher := events.NewDispatcher()
 	supervisor.Add(dispatcher)
 
 	return supervisor, dispatcher
@@ -97,7 +97,7 @@ func SetUpLogging(conf *Logging, supervisor *suture.Supervisor) {
 	log.SetLevel(minLevel)
 }
 
-func NewMinecraftSupervisor(conf *Config, dispatcher events.Dispatcher) *suture.Supervisor {
+func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture.Supervisor {
 	supervisor := suture.NewSimple("minecraft")
 
 	status := minecraft.NewStatusMonitor(dispatcher)
@@ -107,13 +107,13 @@ func NewMinecraftSupervisor(conf *Config, dispatcher events.Dispatcher) *suture.
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	supervisor.Add(bot)
 
-	server := minecraft.NewServer(*conf.Minecraft, dispatcher)
+	server := minecraft.NewServer(conf.Minecraft, dispatcher)
 
 	control := &serverControl{supervisor: supervisor, server: server}
 	controller := minecraft.NewController(control, dispatcher)
 	supervisor.Add(controller)
 
-	pinger := minecraft.NewPinger(*conf.Minecraft, dispatcher)
+	pinger := minecraft.NewPinger(conf.Minecraft, dispatcher)
 	supervisor.Add(pinger)
 
 	return supervisor

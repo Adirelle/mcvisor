@@ -2,7 +2,6 @@ package minecraft
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"time"
@@ -13,8 +12,8 @@ import (
 
 type (
 	Server struct {
-		Config
-		events.Dispatcher
+		*Config
+		dispatcher *events.Dispatcher
 	}
 
 	ServerEvent struct {
@@ -25,15 +24,8 @@ type (
 
 const ServerStopTimeout = 10 * time.Second
 
-// interface check
-var _ events.Event = (*ServerEvent)(nil)
-
-func NewServer(conf Config, dispatcher events.Dispatcher) *Server {
-	return &Server{Config: conf, Dispatcher: dispatcher}
-}
-
-func (s *Server) GoString() string {
-	return fmt.Sprintf("Minecraft Server (%s)", s.WorkingDir)
+func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
+	return &Server{conf, dispatcher}
 }
 
 func (s *Server) Serve(ctx context.Context) error {
@@ -48,7 +40,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	startLogger := log.WithField("cmd", cmd.String())
 	startLogger.WithField("cmd", cmd.String()).Info("server.starting")
 
-	s.Dispatch(&ServerEvent{cmd, Starting})
+	s.dispatcher.Dispatch(&ServerEvent{cmd, Starting})
 
 	if err := cmd.Start(); err != nil {
 		startLogger.WithError(err).Error("server.start.error")
@@ -58,7 +50,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	runLogger := log.WithField("pid", cmd.Process.Pid)
 	runLogger.Info("server.started")
 
-	s.Dispatch(&ServerEvent{cmd, Started})
+	s.dispatcher.Dispatch(&ServerEvent{cmd, Started})
 
 	err := cmd.Wait()
 	if err != nil {
@@ -67,7 +59,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		runLogger.Info("server.stopped")
 	}
 
-	s.Dispatch(&ServerEvent{cmd, Stopped})
+	s.dispatcher.Dispatch(&ServerEvent{cmd, Stopped})
 
 	return err
 }
