@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/events"
@@ -23,7 +24,6 @@ type (
 	}
 
 	ServerEvent struct {
-		*exec.Cmd
 		Status
 	}
 )
@@ -40,76 +40,77 @@ func (s *Server) Serve(ctx context.Context) error {
 		return fmt.Errorf("could not generate log4j.conf: %w", err)
 	}
 
-	cmdLine := s.Command()
-	cmd := exec.Command(cmdLine[0], cmdLine[1:]...)
-	cmd.Dir = s.WorkingDir()
-	cmd.Env = s.Env()
+	s.dispatcher.Dispatch(&ServerEvent{Starting})
 
-	consoleInput, err := cmd.StdinPipe()
+	cmd, err := s.Start()
 	if err != nil {
-		return fmt.Errorf("could not pipe to stdin: %s", err)
+		log.WithField("cmd", cmd.Args).WithError(err).Error("server.start")
+		return fmt.Errorf("could not start server: %w", err)
 	}
 
-	consoleOutput, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("could not pipe from stdout: %s", err)
-	}
+	log.WithField("cmd", cmd.Args).WithField("pid", cmd.Process.Pid).Info("server.started")
+	s.dispatcher.Dispatch(&ServerEvent{Started})
 
-	errorOutput, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("could not pipe from stderr: %s", err)
-	}
-
-	go s.ShutdownOnContext(ctx, cmd, consoleInput)
-	go s.ReadStdout(consoleOutput)
-	go s.ReadStderr(errorOutput)
-
-	startLogger := log.WithField("cmd", cmd.String())
-	startLogger.WithField("cmd", cmd.String()).Info("server.starting")
-
-	s.dispatcher.Dispatch(&ServerEvent{cmd, Starting})
-
-	err = cmd.Start()
-	if err != nil {
-		startLogger.WithError(err).Error("server.start.error")
-		return err
-	}
-
-	runLogger := log.WithField("pid", cmd.Process.Pid)
-	runLogger.Info("server.started")
-
-	s.dispatcher.Dispatch(&ServerEvent{cmd, Started})
+	stoppedCtx, stopped := context.WithCancel(context.Background())
+	go s.HitMan(cmd.Process, ctx, stoppedCtx)
 
 	err = cmd.Wait()
-	if err != nil && ctx.Err() != context.Canceled {
-		runLogger.WithError(err).Error("server.stopped")
-	} else {
-		runLogger.Info("server.stopped")
-	}
+	stopped()
 
-	s.dispatcher.Dispatch(&ServerEvent{cmd, Stopped})
+	log.WithError(err).WithFields(log.Fields{
+		"pid":      cmd.ProcessState.Pid,
+		"exitCode": cmd.ProcessState.ExitCode(),
+	}).Info("server.stopped")
+
+	s.dispatcher.Dispatch(&ServerEvent{Stopped})
 
 	return err
 }
 
-func (s *Server) ShutdownOnContext(ctx context.Context, cmd *exec.Cmd, stdin io.WriteCloser) {
-	<-ctx.Done()
-	s.dispatcher.Dispatch(&ServerEvent{cmd, Stopping})
-	log.WithError(ctx.Err()).Info("server.shutdown.reason")
-	_, err := io.WriteString(stdin, `/tellraw @a {"text":"Stopping the server","color":"red"}\n/stop\n`)
-	if err != nil {
-		log.WithError(err).Error("server.shutdown.gently")
+func (s *Server) Start() (*exec.Cmd, error) {
+	cmdLine := s.Command()
+
+	cmd := exec.Command(cmdLine[0], cmdLine[1:]...)
+	cmd.Dir = s.WorkingDir()
+	cmd.Env = s.Env()
+	cmd.Stdin = os.Stdin
+
+	if stdout, err := cmd.StdoutPipe(); err == nil {
+		go s.ParseStdout(stdout)
+	} else {
+		return cmd, err
 	}
-	_ = stdin.Close()
-	<-time.After(10 * time.Second)
-	log.WithError(ctx.Err()).Warn("server.shutdown.forcefully")
-	err = cmd.Process.Kill()
-	if err != nil {
-		log.WithError(err).Error("server.shutdown.forcefully")
+
+	if stderr, err := cmd.StderrPipe(); err == nil {
+		go s.LogStderr(stderr)
+	} else {
+		return cmd, err
+	}
+
+	return cmd, cmd.Start()
+}
+
+func (s *Server) HitMan(process *os.Process, kill context.Context, stoppedCtx context.Context) {
+	select {
+	case <-stoppedCtx.Done():
+		return
+	case <-kill.Done():
+	}
+	s.dispatcher.Dispatch(&ServerEvent{Stopping})
+	err := process.Signal(os.Kill)
+	log.WithField("pid", process.Pid).WithError(err).Info("server.stopping")
+
+	stopTimeout, cleanup := context.WithTimeout(stoppedCtx, 5*time.Second)
+	defer cleanup()
+
+	<-stopTimeout.Done()
+	if stopTimeout.Err() == context.DeadlineExceeded {
+		err = process.Signal(syscall.SIGKILL)
+		log.WithField("pid", process.Pid).WithError(err).Warn("server.kill")
 	}
 }
 
-func (s *Server) ReadStdout(stdout io.ReadCloser) {
+func (s *Server) ParseStdout(stdout io.ReadCloser) {
 	reader := bufio.NewReader(stdout)
 	buffer := bytes.Buffer{}
 	for {
@@ -130,7 +131,7 @@ func (s *Server) ReadStdout(stdout io.ReadCloser) {
 	}
 }
 
-func (s *Server) ReadStderr(stderr io.ReadCloser) {
+func (s *Server) LogStderr(stderr io.ReadCloser) {
 	reader := bufio.NewReader(stderr)
 	buffer := strings.Builder{}
 	for {
@@ -187,15 +188,4 @@ func (s *Server) GenerateLog4JConf() error {
 	</Loggers>
 </Configuration>`
 	return os.WriteFile(s.Server.AbsLog4JConf(), []byte(content), os.FileMode(0o644))
-}
-
-func (e *ServerEvent) Fields() log.Fields {
-	fields := log.Fields{"status": e.Status}
-	if e.Process != nil {
-		fields["pid"] = e.Process.Pid
-	}
-	if e.ProcessState != nil {
-		fields["exitCode"] = e.ProcessState.ExitCode()
-	}
-	return fields
 }
