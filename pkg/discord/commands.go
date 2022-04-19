@@ -81,32 +81,32 @@ loop:
 	return
 }
 
-func (b *Bot) HandleHelpCommand(cmd *commands.Command) error {
+func (b *Bot) HandleHelpCommand(cmd *commands.Command) {
 	defer close(cmd.Response)
 	lineFmt := fmt.Sprintf("%%-%ds - %%s\n", commands.MaxCommandNameLen)
 	cmd.Response <- "\n```\n"
 	for _, def := range commands.Definitions {
-		//		if commands.IsAllowed(def.Category, cmd.Actor) {
-		cmd.Response <- fmt.Sprintf(lineFmt, def.Name, def.Description)
-		//		}
+		if commands.IsAllowed(def.Category, cmd.Actor) {
+			cmd.Response <- fmt.Sprintf(lineFmt, def.Name, def.Description)
+		}
 	}
 	cmd.Response <- "```"
-	return nil
 }
 
-func (b *Bot) HandlePermCommand(cmd *commands.Command) error {
+func (b *Bot) HandlePermCommand(cmd *commands.Command) {
 	defer close(cmd.Response)
 	cmd.Response <- "Command permissons:\n"
 	for _, def := range commands.Definitions {
+
 		items := make(map[string]bool, 10)
-		commands.Explain(def.Category, commands.Consumer(func(item string) {
+		commands.Explain(def.Category, func(item string) {
 			items[item] = true
-		}))
+		})
+
 		cmd.Response <- fmt.Sprintf("`%s`:", def.Name)
 		for item := range items {
 			cmd.Response <- fmt.Sprintf(" %s", item)
 		}
 		cmd.Response <- "\n"
 	}
-	return nil
 }

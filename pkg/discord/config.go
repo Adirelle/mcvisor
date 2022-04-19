@@ -15,7 +15,5 @@ type (
 )
 
 func NewConfig() *Config {
-	return &Config{
-		CommandPrefix: "!",
-	}
+	return &Config{CommandPrefix: "!"}
 }

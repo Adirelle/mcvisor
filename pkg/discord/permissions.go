@@ -12,9 +12,9 @@ import (
 
 type (
 	Permissions struct {
-		Admin   PermissionList `json:"admin" validate:"required"`
-		Control PermissionList `json:"control" validate:"required"`
-		Query   PermissionList `json:"query" validate:"required"`
+		Admin   PermissionList `json:"admin,omitempty"`
+		Control PermissionList `json:"control,omitempty"`
+		Query   PermissionList `json:"query,omitempty"`
 		Public  PermissionList `json:"public,omitempty"`
 	}
 
@@ -54,76 +54,70 @@ var (
 	_ log.Fielder         = (*messageActor)(nil)
 )
 
-func (p *Permissions) IsAllowed(category commands.Category, actor commands.Actor) commands.Decision {
+func (p *Permissions) IsAllowed(category commands.Category, actor commands.Actor) bool {
 	switch category {
 	case PublicCategory:
-		if p.Public.IsAllowed(category, actor).IsAllowed() {
-			return commands.Allowed
+		if p.Public.IsAllowed(category, actor) {
+			return true
 		}
 		fallthrough
 	case QueryCategory:
-		if p.Query.IsAllowed(category, actor).IsAllowed() {
-			return commands.Allowed
+		if p.Query.IsAllowed(category, actor) {
+			return true
 		}
 		fallthrough
 	case ControlCategory:
-		if p.Control.IsAllowed(category, actor).IsAllowed() {
-			return commands.Allowed
+		if p.Control.IsAllowed(category, actor) {
+			return true
 		}
 		fallthrough
 	case AdminCategory:
-		if p.Admin.IsAllowed(category, actor).IsAllowed() {
-			return commands.Allowed
+		if p.Admin.IsAllowed(category, actor) {
+			return true
 		}
 	}
-	return commands.Pass
+	return false
 }
 
-func (p *Permissions) Explain(category commands.Category, consumer commands.Consumer) {
+func (p *Permissions) Explain(category commands.Category, tell func(string)) {
 	switch category {
 	case PublicCategory:
-		p.Public.Explain(category, consumer)
+		p.Public.Explain(category, tell)
 		fallthrough
 	case QueryCategory:
-		p.Query.Explain(category, consumer)
+		p.Query.Explain(category, tell)
 		fallthrough
 	case ControlCategory:
-		p.Control.Explain(category, consumer)
+		p.Control.Explain(category, tell)
 		fallthrough
 	case AdminCategory:
-		p.Admin.Explain(category, consumer)
+		p.Admin.Explain(category, tell)
 	}
 }
 
-func (l PermissionList) IsAllowed(category commands.Category, actor commands.Actor) (decision commands.Decision) {
+func (l PermissionList) IsAllowed(category commands.Category, actor commands.Actor) bool {
 	for _, item := range l {
-		switch item.IsAllowed(category, actor) {
-		case commands.Allowed:
-			decision = commands.Allowed
-		case commands.Denied:
-			return commands.Denied
+		if !item.IsAllowed(category, actor) {
+			return false
 		}
 	}
-	return
+	return true
 }
 
-func (l PermissionList) Explain(category commands.Category, consumer commands.Consumer) {
+func (l PermissionList) Explain(category commands.Category, tell func(string)) {
 	for _, item := range l {
-		item.Explain(category, consumer)
+		item.Explain(category, tell)
 	}
 }
 
-func (i PermissionItem) IsAllowed(_ commands.Category, cmdActor commands.Actor) (decision commands.Decision) {
+func (i PermissionItem) IsAllowed(_ commands.Category, cmdActor commands.Actor) bool {
 	actor, isActor := cmdActor.(Actor)
-	if isActor && ((i.UserID != nil && actor.IsUser(*i.UserID)) ||
+	return isActor && ((i.UserID != nil && actor.IsUser(*i.UserID)) ||
 		(i.RoleID != nil && actor.HasRole(*i.RoleID)) ||
-		(i.ChannelID != nil && actor.InChannel(*i.ChannelID))) {
-		return commands.Allowed
-	}
-	return commands.Pass
+		(i.ChannelID != nil && actor.InChannel(*i.ChannelID)))
 }
 
-func (i PermissionItem) Explain(category commands.Category, consumer commands.Consumer) {
+func (i PermissionItem) Explain(category commands.Category, tell func(string)) {
 	parts := make([]string, 0, 3)
 	if i.UserID != nil {
 		parts = append(parts, fmt.Sprintf("<@%s>", *i.UserID))
@@ -134,10 +128,8 @@ func (i PermissionItem) Explain(category commands.Category, consumer commands.Co
 	if i.ChannelID != nil {
 		parts = append(parts, fmt.Sprintf("<#%s>", *i.ChannelID))
 	}
-	if len(parts) == 0 {
-		consumer("noone")
-	} else {
-		consumer(strings.Join(parts, "&"))
+	if len(parts) >= 0 {
+		tell(strings.Join(parts, "&"))
 	}
 }
 
