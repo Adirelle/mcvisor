@@ -38,20 +38,20 @@ func (b *Bot) HandleMessage(message *discordgo.Message, ctx context.Context) {
 	go func() {
 		defer cancel()
 		if err := b.CommandReply(response, message, cmdCtx); err == nil {
-			logger.Debug("bot.command.replied")
+			logger.Debug("discord.command.replied")
 		} else {
-			logger.WithError(err).Error("bot.command.error")
+			logger.WithError(err).Error("discord.command.error")
 		}
-		logger.WithError(cmdCtx.Err()).Debug("bot.command.context")
+		logger.WithError(cmdCtx.Err()).Debug("discord.command.context")
 	}()
 
 	cmd, err := commands.ParseCommand(message.Content[1:], actor, response)
 	if err != nil {
-		logger.WithError(err).Error("bot.command.error")
+		logger.WithError(err).Error("discord.command.error")
 		return
 	}
 
-	logger.WithField("command", cmd).Info("bot.command.received")
+	logger.WithField("command", cmd).Info("discord.command.received")
 	b.dispatcher.Dispatch(cmd)
 }
 
