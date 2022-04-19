@@ -68,7 +68,8 @@ func (s *StatusMonitor) Serve(ctx context.Context) error {
 			}
 		case cmd := <-s.commands:
 			if cmd.Name == StatusCommand {
-				_, _ = fmt.Fprintf(cmd.Reply, "Server %s <t:%d:R>", s.status, s.lastUpdate.Unix())
+				cmd.Response <- fmt.Sprintf("Server %s <t:%d:R>", s.status, s.lastUpdate.Unix())
+				close(cmd.Response)
 			}
 		case <-ctx.Done():
 			return nil

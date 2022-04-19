@@ -21,12 +21,14 @@ type (
 )
 
 func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
-	return &Bot{
+	b := &Bot{
 		Config:     config,
 		dispatcher: dispatcher,
 		commands:   events.MakeHandler[*commands.Command](),
 		messages:   events.MakeHandler[*discordgo.Message](),
 	}
+	commands.PushPermissions(b.Permissions)
+	return b
 }
 
 func (b *Bot) Serve(ctx context.Context) (err error) {
@@ -48,7 +50,7 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 				b.HandleHelpCommand(cmd)
 			}
 		case msg := <-b.messages:
-			b.HandleMessage(msg)
+			b.HandleMessage(msg, ctx)
 		case <-ctx.Done():
 			return nil
 		}

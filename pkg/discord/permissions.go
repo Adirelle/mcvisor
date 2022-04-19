@@ -51,31 +51,32 @@ var (
 	_ commands.Permission = (*PermissionList)(nil)
 	_ commands.Permission = (*PermissionItem)(nil)
 	_ Actor               = (*messageActor)(nil)
+	_ log.Fielder         = (*messageActor)(nil)
 )
 
-func (p *Permissions) IsAllowed(category commands.Category, actor commands.Actor) bool {
+func (p *Permissions) IsAllowed(category commands.Category, actor commands.Actor) commands.Decision {
 	switch category {
 	case PublicCategory:
-		if p.Public.IsAllowed(category, actor) {
-			return true
+		if p.Public.IsAllowed(category, actor).IsAllowed() {
+			return commands.Allowed
 		}
 		fallthrough
 	case QueryCategory:
-		if p.Query.IsAllowed(category, actor) {
-			return true
+		if p.Query.IsAllowed(category, actor).IsAllowed() {
+			return commands.Allowed
 		}
 		fallthrough
 	case ControlCategory:
-		if p.Control.IsAllowed(category, actor) {
-			return true
+		if p.Control.IsAllowed(category, actor).IsAllowed() {
+			return commands.Allowed
 		}
 		fallthrough
 	case AdminCategory:
-		if p.Admin.IsAllowed(category, actor) {
-			return true
+		if p.Admin.IsAllowed(category, actor).IsAllowed() {
+			return commands.Allowed
 		}
 	}
-	return false
+	return commands.Pass
 }
 
 func (p *Permissions) Explain(category commands.Category, consumer commands.Consumer) {
@@ -94,33 +95,32 @@ func (p *Permissions) Explain(category commands.Category, consumer commands.Cons
 	}
 }
 
-func (l PermissionList) IsAllowed(category commands.Category, actor commands.Actor) bool {
-	if len(l) == 0 {
-		return true
-	}
+func (l PermissionList) IsAllowed(category commands.Category, actor commands.Actor) (decision commands.Decision) {
 	for _, item := range l {
-		if item.IsAllowed(category, actor) {
-			return true
+		switch item.IsAllowed(category, actor) {
+		case commands.Allowed:
+			decision = commands.Allowed
+		case commands.Denied:
+			return commands.Denied
 		}
 	}
-	return false
+	return
 }
 
 func (l PermissionList) Explain(category commands.Category, consumer commands.Consumer) {
-	if len(l) == 0 {
-		consumer("anyone")
-	}
 	for _, item := range l {
 		item.Explain(category, consumer)
 	}
 }
 
-func (i PermissionItem) IsAllowed(_ commands.Category, cmdActor commands.Actor) bool {
+func (i PermissionItem) IsAllowed(_ commands.Category, cmdActor commands.Actor) (decision commands.Decision) {
 	actor, isActor := cmdActor.(Actor)
-	return isActor &&
-		(i.UserID == nil || actor.IsUser(*i.UserID)) &&
-		(i.RoleID == nil || actor.HasRole(*i.RoleID)) &&
-		(i.ChannelID == nil || actor.InChannel(*i.ChannelID))
+	if isActor && ((i.UserID != nil && actor.IsUser(*i.UserID)) ||
+		(i.RoleID != nil && actor.HasRole(*i.RoleID)) ||
+		(i.ChannelID != nil && actor.InChannel(*i.ChannelID))) {
+		return commands.Allowed
+	}
+	return commands.Pass
 }
 
 func (i PermissionItem) Explain(category commands.Category, consumer commands.Consumer) {

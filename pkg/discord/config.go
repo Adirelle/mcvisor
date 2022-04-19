@@ -1,7 +1,6 @@
 package discord
 
 import (
-	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/utils"
 )
 
@@ -17,10 +16,6 @@ type (
 
 func NewConfig() *Config {
 	return &Config{
-		CommandPrefix: string(commands.Prefix),
+		CommandPrefix: "!",
 	}
-}
-
-func (c Config) Apply() {
-	commands.Prefix = rune(c.CommandPrefix[0])
 }

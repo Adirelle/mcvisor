@@ -103,7 +103,6 @@ func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture
 	status := minecraft.NewStatusMonitor(dispatcher)
 	supervisor.Add(status)
 
-	conf.Discord.Apply()
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	supervisor.Add(bot)
 

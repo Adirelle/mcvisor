@@ -80,10 +80,6 @@ func LoadConfig(path string) (c *Config, err error) {
 	return
 }
 
-func (c *Config) Apply() {
-	c.Discord.Apply()
-}
-
 func (c *Config) Read() error {
 	content, err := os.ReadFile(c.Path)
 	if err != nil {

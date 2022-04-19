@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,33 +12,38 @@ type (
 	Name string
 
 	Definition struct {
-		Name        Name
+		Name
 		Description string
 		Category
 	}
 
 	Command struct {
-		*Definition
-		Actor
+		Name
 		Arguments []string
-		Reply     *bufio.Writer
+		Actor
+		Response chan<- string
 	}
-
-	CommandHandlerFunc func(cmd *Command) error
 )
 
 var (
-	Prefix rune = '!'
+	Definitions       = make(map[Name]*Definition, 10)
+	MaxCommandNameLen = 0
 
-	ErrNoCommandPrefix = errors.New("missing command prefix")
-	ErrUnknownCommand  = errors.New("unknown command")
+	ErrUnknownCommand = errors.New("unknown command")
 
 	// interface checks
 	_ log.Fielder = (*Command)(nil)
 )
 
-func (n Name) String() string {
-	return fmt.Sprintf("%c%s", Prefix, string(n))
+func Register(name Name, description string, category Category) {
+	RegisterDefinition(Definition{name, description, category})
+}
+
+func RegisterDefinition(def Definition) {
+	Definitions[def.Name] = &def
+	if l := len(def.Name); l > MaxCommandNameLen {
+		MaxCommandNameLen = l
+	}
 }
 
 func (c *Command) String() string {
@@ -59,17 +63,26 @@ func (c *Command) Fields() log.Fields {
 	return fields
 }
 
-func NewCommandFromString(line string, actor Actor) (*Command, error) {
-	if line[0] != byte(Prefix) {
-		return nil, ErrNoCommandPrefix
-	}
+func ParseCommand(line string, actor Actor, response chan<- string) (cmd *Command, err error) {
+	defer func() {
+		if err != nil {
+			response <- fmt.Sprintf("**%s**", err)
+			close(response)
+		}
+	}()
 
-	words := strings.Split(line[1:], " ")
+	words := strings.Split(line, " ")
 	name := Name(words[0])
 	def, found := Definitions[name]
 	if !found {
-		return nil, ErrUnknownCommand
+		err = ErrUnknownCommand
+		return
 	}
 
-	return &Command{def, actor, words[1:], nil}, nil
+	cmd = &Command{def.Name, words[1:], actor, response}
+	if !IsAllowed(def.Category, actor) {
+		err = ErrPermissionDenied
+	}
+
+	return
 }

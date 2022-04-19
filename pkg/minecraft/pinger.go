@@ -3,7 +3,6 @@ package minecraft
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
@@ -39,7 +38,7 @@ type (
 
 	PingerEvent interface {
 		IsSuccess() bool
-		writeReport(io.Writer) error
+		writeReport(chan<- string)
 	}
 
 	PingSucceeded struct {
@@ -102,7 +101,7 @@ func (p *Pinger) Serve(ctx context.Context) error {
 			return nil
 		case cmd := <-p.commands:
 			if cmd.Name == OnlineCommand {
-				p.lastPing.writeReport(cmd.Reply)
+				p.lastPing.writeReport(cmd.Response)
 			}
 		case when := <-ticker.C:
 			p.lastPing = pingStrategy.Ping(when)
@@ -184,14 +183,14 @@ func (p *PingSucceeded) Fields() log.Fields {
 	}
 }
 
-func (p *PingSucceeded) writeReport(writer io.Writer) error {
-	_, _ = fmt.Fprintf(writer, "Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
+func (p *PingSucceeded) writeReport(response chan<- string) {
+	defer close(response)
+	response <- fmt.Sprintf("Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
 	if len(p.PlayerList) > 0 {
 		for _, name := range p.PlayerList {
-			fmt.Fprintf(writer, "\n- %s", name)
+			response <- fmt.Sprintf("\n- %s", name)
 		}
 	}
-	return nil
 }
 
 func (PingFailed) IsSuccess() bool {
@@ -202,9 +201,9 @@ func (p *PingFailed) Fields() log.Fields {
 	return log.Fields{"error": p.Reason}
 }
 
-func (p *PingFailed) writeReport(writer io.Writer) (err error) {
-	_, err = io.WriteString(writer, "**last ping failed**")
-	return
+func (p *PingFailed) writeReport(response chan<- string) {
+	defer close(response)
+	response <- "**last ping failed**"
 }
 
 func (PingDisabled) IsSuccess() bool {
@@ -215,7 +214,7 @@ func (PingDisabled) Fields() log.Fields {
 	return nil
 }
 
-func (PingDisabled) writeReport(writer io.Writer) (err error) {
-	_, err = io.WriteString(writer, "**both status and query are disabled in server configuration**")
-	return
+func (PingDisabled) writeReport(response chan<- string) {
+	defer close(response)
+	response <- "**both status and query are disabled in server configuration**"
 }
