@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
+	"github.com/Adirelle/mcvisor/pkg/logging"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/apex/log"
 	"github.com/go-playground/validator/v10"
@@ -21,7 +22,7 @@ type (
 		Path      string            `json:"-"`
 		Minecraft *minecraft.Config `json:"minecraft" validate:"required"`
 		Discord   *discord.Config   `json:"discord" validate:"required"`
-		Logging   *Logging          `json:"logging"`
+		Logging   *logging.Config   `json:"logging"`
 	}
 )
 
@@ -56,7 +57,7 @@ func NewConfig(path string) (c *Config) {
 		Path:      path,
 		Minecraft: minecraft.NewConfig(filepath.Dir(path)),
 		Discord:   discord.NewConfig(),
-		Logging:   NewLogging(),
+		Logging:   logging.NewConfig(),
 	}
 }
 

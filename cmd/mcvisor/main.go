@@ -8,9 +8,9 @@ import (
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
+	"github.com/Adirelle/mcvisor/pkg/logging"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/apex/log"
-	"github.com/apex/log/handlers/multi"
 	"github.com/thejerf/suture/v4"
 )
 
@@ -78,23 +78,13 @@ func NewMainSupervisor(conf *Config) (*suture.Supervisor, *events.Dispatcher) {
 	return supervisor, dispatcher
 }
 
-func SetUpLogging(conf *Logging, supervisor *suture.Supervisor) {
-	var handler log.Handler
-
-	minLevel := conf.Console.Level()
-	handler = conf.Console.Handler()
-
-	if conf.File != nil && !conf.File.Disabled {
-		fileHandler := conf.File.Handler()
-		supervisor.Add(conf.File)
-		handler = multi.New(handler, fileHandler)
-		if conf.File.Level < minLevel {
-			minLevel = conf.File.Level
-		}
+func SetUpLogging(conf *logging.Config, supervisor *suture.Supervisor) {
+	var service suture.Service
+	def := log.Log.(*log.Logger)
+	def.Handler, def.Level, service = conf.CreateLogging()
+	if service != nil {
+		supervisor.Add(service)
 	}
-
-	log.SetHandler(handler)
-	log.SetLevel(minLevel)
 }
 
 func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture.Supervisor {
