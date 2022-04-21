@@ -1,16 +1,8 @@
-# What?
-
-<div style="float:left">
-
-![mcvisor logo](assets/logo.png)!
-
-</div>
+# mcvisor
 
 mcvisor is a Minecraft server supervisor written in [Go](https://go.dev/).
 It launches and monitors a Minecraft server. It also starts a Discord bot
 that can notify a channel of event and accepts commands.
-
-<div style="clear:left"></div>
 
 # Planned features
 
@@ -56,4 +48,5 @@ that can notify a channel of event and accepts commands.
 
 # License
 
-Unless explicitly stated otherwise all files in this repository are licensed under the GNU Affero General Public License version 3 (AGPL-3).
+Unless explicitly stated otherwise all files in this repository are licensed
+under the [GNU Affero General Public License version 3 (AGPL-3)](https://www.gnu.org/licenses/agpl-3.0.en.html).
