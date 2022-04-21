@@ -7,40 +7,37 @@ A Minecraft server supervisor that notifies Discord channels and accepts command
 Because a mod is useless when the server is down. The supervisor is independant of the server and monitors it.
 It is still there if the server goes down, can restart it, etc...
 
-# Features
+# Planned features
 
-Most configuration is done through a JSON file.
+(Non exhaustive list)
 
-## Minecraft server supervision
+- General
+  - [x] JSON configuration
+  - [x] Rotating file logging
+  - [x] Console logging
+- Minecraft
+  - [x] Server starting, stopping and restarting
+  - [x] Automatic restarting
+  - [x] Capture server logs
+  - [x] Capture console output
+  - [x] Monitor connectivity
+  - [x] `!start`, `!stop`, `!restart` and `!shutdown` command to control the server
+  - [x] `!online` command to list the players that are connected to the server
+  - [x] `!status` command to show the server status
+  - [ ] `!console` command to send command to the serve console
+  - [ ] Planned restarts/commands
+  - [ ] Restart on unreachable status (?)
+- Discord Bot
+  - [x] Automatic reconnection
+  - [x] Accept commands
+  - [x] User, channel and role permissions using Discord IDs
+  - [x] Checks server membership and channels on connection
+  - [ ] Notifications in a given channel
+- Commands
+  - [x] Extendable command system with permission checks
+  - [x] `!help` command to list allowed commands
+  - [x] `!perms` command to show command permissions
 
-- Start, stop and restart the server on demand.
-- Monitor the server process.
-- (maybe) Monitor the network status.
-- Autostart the server if configured so.
-- Restart the server when it goes down unexpectedly, eventually with a delay between each tries and a maximum number of tries.
+# License
 
-## Discord integration
-
-- Notify channels of various events (server status change, console messages, ...).
-- Accept commands.
-- Discord access control, leveraging roles/users.
-
-### Commands
-
-Grouped by permissions:
-
-- `control`:
-  - `!start`: start the server
-  - `!stop [when]`: stop the server at a given time (possibly "now", "10:00", "5 minutes", ...)
-  - `!restart [when]`: restart the server at a given time (possibly "now")
-- `query`:
-  - `!status`: display server status
-  - `!online`: list online players
-- `console`:
-  - `!console [text]`: send text to the console
-
-## Other?
-
-- A command to download logs?
-- Scheduled restarts?
-- CLI to send commands?
+Unless explicitly stated otherwise all files in this repository are licensed under the GNU Affero General Public License version 3 (AGPL-3).
