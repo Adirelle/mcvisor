@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,9 @@ type (
 		Status
 	}
 )
+
+//go:embed log4j.xml
+var log4jFile []byte
 
 const ServerStopTimeout = 10 * time.Second
 
@@ -148,44 +152,5 @@ func (s *Server) LogStderr(stderr io.ReadCloser) {
 }
 
 func (s *Server) GenerateLog4JConf() error {
-	// TODO: something better...
-	content := `<?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="fatal">
-	<Appenders>
-		<Console name="console" target="SYSTEM_OUT" >
-			<PatternLayout
-				pattern='"%enc{%m}{JSON}"%n'
-				disableAnsi="true"
-				noConsoleNoAnsi="true"
-				/>
-			<Filters>
-				<RegexFilter regex="Generating keypair" onMatch="DENY" onMismatch="NEUTRAL"/>
-				<RegexFilter regex="Preparing start region for .*" onMatch="DENY" onMismatch="NEUTRAL"/>
-			</Filters>
-		</Console>
-
-		<Console name="errors" target="SYSTEM_ERR">
-			<PatternLayout pattern="[%level] (%c): %msg%n" />
-			<ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
-		</Console>
-
-		<RollingFile name="rolling_server_log" fileName="logs/server.log"
-				filePattern="logs/server_%d{yyyy-MM-dd}.log">
-			<PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} [%level] %msg%n" />
-			<Policies>
-				<TimeBasedTriggeringPolicy />
-			</Policies>
-		</RollingFile>
-	</Appenders>
-	<Loggers>
-		<Logger name="net.minecraft.server.MinecraftServer" level="info">
-			<AppenderRef ref="console" />
-		</Logger>
-		<Root level="info">
-			<AppenderRef ref="rolling_server_log" />
-			<AppenderRef ref="errors" />
-		</Root>
-	</Loggers>
-</Configuration>`
-	return os.WriteFile(s.Server.AbsLog4JConf(), []byte(content), os.FileMode(0o644))
+	return os.WriteFile(s.Server.AbsLog4JConf(), log4jFile, os.FileMode(0o644))
 }
