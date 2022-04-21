@@ -1,9 +1,9 @@
 # mcvisor
 
 [![go 1.18](https://badgen.net/badge/go/1.18)](https://go.dev/)
-[![main/lint](https://badgen.net/github/checks/Adirelle/mcvisor/main/lint)](https://github.com/Adirelle/mcvisor/actions/workflows/lint.yml)
-[![main/test](https://badgen.net/github/checks/Adirelle/mcvisor/main/test)](https://github.com/Adirelle/mcvisor/actions/workflows/test.yml)
-[![main/latest](https://badgen.net/github/checks/Adirelle/mcvisor/main/latest)](https://github.com/Adirelle/mcvisor/actions/workflows/latest.yml)
+[![Lint](https://github.com/Adirelle/mcvisor/actions/workflows/lint.yml/badge.svg)](https://github.com/Adirelle/mcvisor/actions/workflows/lint.yml)
+[![Test](https://github.com/Adirelle/mcvisor/actions/workflows/test.yml/badge.svg)](https://github.com/Adirelle/mcvisor/actions/workflows/test.yml)
+[![Latest binaries](https://github.com/Adirelle/mcvisor/actions/workflows/latest.yml/badge.svg)](https://github.com/Adirelle/mcvisor/actions/workflows/latest.yml)
 [![AGPL-3.0](https://badgen.net/github/license/Adirelle/mcvisor)](https://www.gnu.org/licenses/agpl-3.0.en.html)
 
 mcvisor is a Minecraft server supervisor.
