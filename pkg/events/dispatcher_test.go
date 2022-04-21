@@ -22,7 +22,9 @@ func TestBasic(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	t.Cleanup(cancel)
-	go d.Serve(ctx)
+	go func() {
+		_ = d.Serve(ctx)
+	}()
 
 	d.Subscribe(ch)
 
@@ -50,7 +52,9 @@ func TestUnsubscribe(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	t.Cleanup(cancel)
-	go d.Serve(ctx)
+	go func() {
+		_ = d.Serve(ctx)
+	}()
 
 	sub := d.Subscribe(ch)
 	sub.Cancel()
