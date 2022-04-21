@@ -17,6 +17,7 @@ type (
 		dispatcher *events.Dispatcher
 		commands   chan *commands.Command
 		messages   chan *discordgo.Message
+		notifiers  chan Notifier
 	}
 )
 
@@ -26,6 +27,7 @@ func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
 		dispatcher: dispatcher,
 		commands:   events.MakeHandler[*commands.Command](),
 		messages:   events.MakeHandler[*discordgo.Message](),
+		notifiers:  events.MakeHandler[Notifier](),
 	}
 	commands.PushPermissions(b.Permissions)
 	return b
@@ -41,6 +43,10 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 
 	defer b.dispatcher.Subscribe(b.commands).Cancel()
 
+	if len(b.Notifications) > 0 {
+		defer b.dispatcher.Subscribe(b.notifiers).Cancel()
+	}
+
 	for {
 		select {
 		case cmd := <-b.commands:
@@ -52,6 +58,8 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 			}
 		case msg := <-b.messages:
 			b.HandleMessage(msg, ctx)
+		case notifier := <-b.notifiers:
+			b.HandleNotifier(notifier)
 		case <-ctx.Done():
 			return nil
 		}

@@ -40,7 +40,7 @@ that can notify a channel of event and accepts commands.
   - [x] Accept commands
   - [x] User, channel and role permissions using Discord IDs
   - [x] Checks configuration on connection
-  - [ ] Notifications in a given channel
+  - [x] Notifications in a given channel
 - Web interface (maybe)
   - [ ] External authentification (which?)
   - [ ] Status display

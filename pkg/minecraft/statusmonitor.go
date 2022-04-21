@@ -3,12 +3,14 @@ package minecraft
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/apex/log"
+	"github.com/thejerf/suture/v4"
 )
 
 type (
@@ -33,6 +35,12 @@ const (
 	Stopping    Status = "stopping"
 
 	StatusCommand commands.Name = "status"
+)
+
+var (
+	// Check interface implementations
+	_ discord.Notifier = Stopped
+	_ suture.Service   = (*StatusMonitor)(nil)
 )
 
 func init() {
@@ -85,4 +93,8 @@ func (s *StatusMonitor) setStatus(status Status) {
 	s.lastUpdate = time.Now()
 	log.WithField("status", status).Info("server.status")
 	s.dispatcher.Dispatch(status)
+}
+
+func (s Status) Notify(writer io.Writer) {
+	_, _ = fmt.Fprintf(writer, "**Server %s**", string(s))
 }

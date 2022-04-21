@@ -11,6 +11,7 @@ type (
 		ChannelIDs    []Snowflake  `json:"channelIds" validate:"required,min=1"`
 		CommandPrefix string       `json:"commandPrefix,omitempty" validate:"required,len=1"`
 		Permissions   *Permissions `json:"permissions" validate:"required"`
+		Notifications []Snowflake  `json:"notifications,omitempty"`
 	}
 )
 
