@@ -26,6 +26,13 @@ type (
 		ChannelID *Snowflake `json:"channelId,omitempty" validate:"omitempty,required_without_all=User Role"`
 	}
 
+	Permission interface {
+		commands.Permission
+		ForEachUser(func(Snowflake))
+		ForEachRole(func(Snowflake))
+		ForEachChannel(func(Snowflake))
+	}
+
 	Actor interface {
 		commands.Actor
 		IsUser(Snowflake) bool
@@ -47,11 +54,11 @@ const (
 
 var (
 	// Interface checks
-	_ commands.Permission = (*Permissions)(nil)
-	_ commands.Permission = (*PermissionList)(nil)
-	_ commands.Permission = (*PermissionItem)(nil)
-	_ Actor               = (*messageActor)(nil)
-	_ log.Fielder         = (*messageActor)(nil)
+	_ Permission  = (*Permissions)(nil)
+	_ Permission  = (*PermissionList)(nil)
+	_ Permission  = (*PermissionItem)(nil)
+	_ Actor       = (*messageActor)(nil)
+	_ log.Fielder = (*messageActor)(nil)
 )
 
 func (p *Permissions) IsAllowed(category commands.Category, actor commands.Actor) bool {
@@ -95,6 +102,27 @@ func (p *Permissions) Explain(category commands.Category, tell func(string)) {
 	}
 }
 
+func (p *Permissions) ForEachUser(visit func(Snowflake)) {
+	p.Public.ForEachUser(visit)
+	p.Query.ForEachUser(visit)
+	p.Control.ForEachUser(visit)
+	p.Admin.ForEachUser(visit)
+}
+
+func (p *Permissions) ForEachRole(visit func(Snowflake)) {
+	p.Public.ForEachRole(visit)
+	p.Query.ForEachRole(visit)
+	p.Control.ForEachRole(visit)
+	p.Admin.ForEachRole(visit)
+}
+
+func (p *Permissions) ForEachChannel(visit func(Snowflake)) {
+	p.Public.ForEachChannel(visit)
+	p.Query.ForEachChannel(visit)
+	p.Control.ForEachChannel(visit)
+	p.Admin.ForEachChannel(visit)
+}
+
 func (l PermissionList) IsAllowed(category commands.Category, actor commands.Actor) bool {
 	for _, item := range l {
 		if !item.IsAllowed(category, actor) {
@@ -107,6 +135,24 @@ func (l PermissionList) IsAllowed(category commands.Category, actor commands.Act
 func (l PermissionList) Explain(category commands.Category, tell func(string)) {
 	for _, item := range l {
 		item.Explain(category, tell)
+	}
+}
+
+func (l PermissionList) ForEachUser(visit func(Snowflake)) {
+	for _, item := range l {
+		item.ForEachUser(visit)
+	}
+}
+
+func (l PermissionList) ForEachRole(visit func(Snowflake)) {
+	for _, item := range l {
+		item.ForEachRole(visit)
+	}
+}
+
+func (l PermissionList) ForEachChannel(visit func(Snowflake)) {
+	for _, item := range l {
+		item.ForEachChannel(visit)
 	}
 }
 
@@ -130,6 +176,24 @@ func (i PermissionItem) Explain(category commands.Category, tell func(string)) {
 	}
 	if len(parts) >= 0 {
 		tell(strings.Join(parts, "&"))
+	}
+}
+
+func (i PermissionItem) ForEachUser(visit func(Snowflake)) {
+	if i.UserID != nil {
+		visit(*i.UserID)
+	}
+}
+
+func (i PermissionItem) ForEachRole(visit func(Snowflake)) {
+	if i.RoleID != nil {
+		visit(*i.RoleID)
+	}
+}
+
+func (i PermissionItem) ForEachChannel(visit func(Snowflake)) {
+	if i.ChannelID != nil {
+		visit(*i.ChannelID)
 	}
 }
 
