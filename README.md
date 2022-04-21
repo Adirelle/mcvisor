@@ -1,11 +1,16 @@
 # What?
 
-A Minecraft server supervisor that notifies Discord channels and accepts commands from them.
+<div style="float:left">
 
-# Why not a Minecraft mod?
+![mcvisor logo](assets/logo.png)!
 
-Because a mod is useless when the server is down. The supervisor is independant of the server and monitors it.
-It is still there if the server goes down, can restart it, etc...
+</div>
+
+mcvisor is a Minecraft server supervisor written in [Go](https://go.dev/).
+It launches and monitors a Minecraft server. It also starts a Discord bot
+that can notify a channel of event and accepts commands.
+
+<div style="clear:left"></div>
 
 # Planned features
 
@@ -31,6 +36,7 @@ It is still there if the server goes down, can restart it, etc...
   - [ ] `!console` command to send commands to the server console
   - [ ] Scheduled restarts/scripts
   - [ ] Restart on unreachable status (maybe)
+  - [ ] Disableable
 - Discord Bot
   - [x] Automatic reconnection
   - [x] Accept commands
