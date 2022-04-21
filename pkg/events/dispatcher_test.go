@@ -18,7 +18,7 @@ func TestBasic(t *testing.T) {
 	payload := 10
 
 	d := events.NewDispatcher()
-	ch := make(chan int)
+	ch := events.MakeHandler[int]()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	t.Cleanup(cancel)
@@ -46,7 +46,7 @@ func TestUnsubscribe(t *testing.T) {
 	payload := 10
 
 	d := events.NewDispatcher()
-	ch := make(chan int)
+	ch := events.MakeHandler[int]()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	t.Cleanup(cancel)
