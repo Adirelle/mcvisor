@@ -1,6 +1,12 @@
 # mcvisor
 
-mcvisor is a Minecraft server supervisor written in [Go](https://go.dev/).
+[![go 1.18](https://badgen.net/badge/go/1.18)](https://go.dev/)
+[![main/lint](https://badgen.net/github/checks/Adirelle/mcvisor/main/lint)](https://github.com/Adirelle/mcvisor/actions/workflows/lint.yml)
+[![main/test](https://badgen.net/github/checks/Adirelle/mcvisor/main/test)](https://github.com/Adirelle/mcvisor/actions/workflows/test.yml)
+[![main/latest](https://badgen.net/github/checks/Adirelle/mcvisor/main/lates)](https://github.com/Adirelle/mcvisor/actions/workflows/latest.yml)
+[![AGPL-3.0](https://badgen.net/github/license/Adirelle/mcvisor)](https://www.gnu.org/licenses/agpl-3.0.en.html)
+
+mcvisor is a Minecraft server supervisor.
 It launches and monitors a Minecraft server. It also starts a Discord bot
 that can notify a channel of event and accepts commands.
 
