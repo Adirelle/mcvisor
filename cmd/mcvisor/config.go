@@ -53,11 +53,12 @@ func FindConfigFile(paths []string) string {
 }
 
 func NewConfig(path string) (c *Config) {
+	baseDir := filepath.Dir(path)
 	return &Config{
 		Path:      path,
-		Minecraft: minecraft.NewConfig(filepath.Dir(path)),
+		Minecraft: minecraft.NewConfig(baseDir),
 		Discord:   discord.NewConfig(),
-		Logging:   logging.NewConfig(),
+		Logging:   logging.NewConfig(baseDir),
 	}
 }
 

@@ -19,34 +19,57 @@ type (
 
 var _ factory = (*Config)(nil)
 
-func NewConfig() *Config {
+func NewConfig(baseDir string) *Config {
 	return &Config{
 		Console: ConsoleConfig(log.WarnLevel),
-		File: &FileConfig{
-			Disabled: false,
-			Path:     DefaultFilename,
-			Level:    log.InfoLevel,
-			entries:  make(chan *log.Entry, 100),
-		},
+		File:    NewFileConfig(baseDir),
 	}
 }
 
-func (c *Config) CreateLogging() (log.Handler, log.Level, suture.Service) {
-	handler, minLevel, svc := c.Console.CreateLogging()
+func (c *Config) CreateLogging() (handler log.Handler, minLevel log.Level, service suture.Service) {
+	var handlers []log.Handler
+	var services []suture.Service
+	minLevel = log.FatalLevel
 
-	if c.File != nil && !c.File.Disabled {
-		fileHandler, fileLevel, fileSvc := c.File.CreateLogging()
-		handler = multi.New(handler, fileHandler)
-		if fileLevel < minLevel {
-			minLevel = fileLevel
+	for _, factory := range []factory{c.Console, c.File} {
+		handler, level, service := factory.CreateLogging()
+		if handler == nil {
+			continue
 		}
-		if svc != nil && fileSvc != nil {
-			spv := suture.NewSimple("logger")
-			spv.Add(svc)
-			spv.Add(fileSvc)
-			svc = spv
+		handlers = append(handlers, handler)
+		if level < minLevel {
+			minLevel = level
+		}
+		if service != nil {
+			services = append(services, service)
 		}
 	}
 
-	return handler, minLevel, svc
+	handler = reduce(handlers, log.Log.(*log.Logger).Handler, combineHandlers)
+	service = reduce(services, nil, comineServices)
+
+	return
+}
+
+func reduce[T any](values []T, def T, combine func([]T) T) T {
+	switch len(values) {
+	case 0:
+		return def
+	case 1:
+		return values[0]
+	default:
+		return combine(values)
+	}
+}
+
+func combineHandlers(handlers []log.Handler) log.Handler {
+	return multi.New(handlers...)
+}
+
+func comineServices(services []suture.Service) suture.Service {
+	spv := suture.NewSimple("loggers")
+	for _, service := range services {
+		spv.Add(service)
+	}
+	return spv
 }
