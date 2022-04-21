@@ -47,6 +47,9 @@ func NewFileConfig(baseDir string) *FileConfig {
 }
 
 func (f *FileConfig) CreateLogging() (log.Handler, log.Level, suture.Service) {
+	if f.Disabled {
+		return nil, log.FatalLevel, nil
+	}
 	return f, f.Level, f
 }
 
