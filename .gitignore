@@ -15,9 +15,7 @@
 # vendor/
 
 # Built binaries
-/mcvisor
-/mcvisor.exe
-
+/mcvisor_*
 
 # Test configuration
 mcvisor.json
