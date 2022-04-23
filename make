@@ -35,7 +35,7 @@ cmd_build() {
 
 cmd_clean() {
 	for CMD in ./cmd/*; do
-		rm -fv "${CMD}_*"
+		rm -fv "$(basename ${CMD})_"*
 	done
 }
 
