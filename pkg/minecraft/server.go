@@ -157,6 +157,19 @@ func (s *Server) setTarget(target Target) {
 	s.dispatcher.Dispatch(target)
 }
 
+func (t Target) Notify(writer io.Writer) {
+	switch t {
+	case RestartTarget:
+		_, _ = io.WriteString(writer, "**Restarting the servr**")
+	case StartTarget:
+		_, _ = io.WriteString(writer, "**Starting the server**")
+	case StopTarget:
+		_, _ = io.WriteString(writer, "**Stopping the server**")
+	case ShutdownTarget:
+		_, _ = io.WriteString(writer, "**Shutting down**")
+	}
+}
+
 func (t Target) MustStart() bool {
 	return t == StartTarget
 }
@@ -170,5 +183,9 @@ func (s Status) IsOneOf(status ...Status) bool {
 }
 
 func (s Status) Notify(writer io.Writer) {
-	_, _ = fmt.Fprintf(writer, "**Server %s**", string(s))
+	switch s {
+	case Ready, Unreachable, Stopped:
+		_, _ = fmt.Fprintf(writer, "**Server %s**", string(s))
+	default:
+	}
 }
