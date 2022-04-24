@@ -56,7 +56,10 @@ func main() {
 	dispatcher := events.NewDispatcher()
 
 	bot := discord.NewBot(*conf.Discord, dispatcher)
-	supervisor.Add(bot)
+	if bot.IsEnabled() {
+		supervisor.Add(bot)
+		<-bot.Ready()
+	}
 
 	server := minecraft.NewServer(conf.Minecraft, dispatcher)
 	supervisor.Add(server)

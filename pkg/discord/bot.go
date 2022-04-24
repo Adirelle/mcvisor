@@ -15,6 +15,7 @@ type (
 		Config
 		*discordgo.Session
 		dispatcher *events.Dispatcher
+		ready      chan struct{}
 		commands   chan *commands.Command
 		messages   chan *discordgo.Message
 		notifiers  chan Notifier
@@ -28,9 +29,14 @@ func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
 		commands:   events.MakeHandler[*commands.Command](),
 		messages:   events.MakeHandler[*discordgo.Message](),
 		notifiers:  events.MakeHandler[Notifier](),
+		ready:      make(chan struct{}),
 	}
 	commands.PushPermissions(b.Permissions)
 	return b
+}
+
+func (b *Bot) IsEnabled() bool {
+	return true
 }
 
 func (b *Bot) Serve(ctx context.Context) (err error) {
@@ -64,6 +70,10 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 			return nil
 		}
 	}
+}
+
+func (b *Bot) Ready() <-chan struct{} {
+	return b.ready
 }
 
 func (b *Bot) connect(ctx context.Context) (err error) {
@@ -106,6 +116,7 @@ func (b *Bot) connect(ctx context.Context) (err error) {
 		log.WithField("username", ready.User.Username).Info("discord.bot.ready")
 	case <-ctx.Done():
 	}
+	close(b.ready)
 
 	return
 }
