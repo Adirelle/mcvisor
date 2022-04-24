@@ -10,9 +10,11 @@ require (
 	github.com/millkhan/mcstatusgo/v2 v2.2.0
 	github.com/thejerf/suture/v4 v4.0.2
 	golang.org/x/exp v0.0.0-20220414153411-bcd21879b8fd
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
 
 require (
+	github.com/BurntSushi/toml v1.1.0 // indirect
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
@@ -24,5 +26,4 @@ require (
 	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3 // indirect
 	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 )

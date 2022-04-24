@@ -3,7 +3,7 @@
 	<Appenders>
 		<Console name="console" target="SYSTEM_OUT" >
 			<PatternLayout
-				pattern='"%enc{%m}{JSON}"%n'
+				pattern='%enc{%m}{CRLF}%n'
 				disableAnsi="true"
 				noConsoleNoAnsi="true"
 				/>

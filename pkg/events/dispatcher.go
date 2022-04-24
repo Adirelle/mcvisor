@@ -38,6 +38,9 @@ var (
 		},
 	}
 	defaultSelectCase = reflect.SelectCase{Dir: reflect.SelectDefault}
+
+	_ fmt.GoStringer = (*Dispatcher)(nil)
+	_ fmt.Stringer   = (*Dispatcher)(nil)
 )
 
 func MakeHandler[E any]() chan E {
@@ -50,6 +53,14 @@ func NewDispatcher() *Dispatcher {
 		mu:              &sync.RWMutex{},
 		handlers:        make(map[reflect.Type][]reflect.Value),
 	}
+}
+
+func (d *Dispatcher) String() string {
+	return fmt.Sprintf("Dispatcher(%d)", len(d.handlers))
+}
+
+func (d *Dispatcher) GoString() string {
+	return d.String()
 }
 
 func (d *Dispatcher) Dispatch(event any) {

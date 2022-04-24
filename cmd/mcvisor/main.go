@@ -50,7 +50,7 @@ func main() {
 		select {
 		case sig := <-signals:
 			log.WithField("signal", sig).Warn("signal.received")
-			dispatcher.Dispatch(minecraft.SystemShutdown)
+			dispatcher.Dispatch(minecraft.ShutdownTarget)
 		case err := <-mainC:
 			if err != nil && err != suture.ErrTerminateSupervisorTree {
 				stdlog.Fatalf("error: %s", err)
@@ -89,17 +89,11 @@ func SetUpLogging(conf *logging.Config, supervisor *suture.Supervisor) {
 func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture.Supervisor {
 	supervisor := suture.NewSimple("minecraft")
 
-	status := minecraft.NewStatusMonitor(dispatcher)
-	supervisor.Add(status)
-
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	supervisor.Add(bot)
 
 	server := minecraft.NewServer(conf.Minecraft, dispatcher)
-
-	control := &serverControl{supervisor: supervisor, server: server}
-	controller := minecraft.NewController(control, dispatcher)
-	supervisor.Add(controller)
+	supervisor.Add(server)
 
 	pinger := minecraft.NewPinger(conf.Minecraft.Server, dispatcher)
 	supervisor.Add(pinger)

@@ -1,156 +1,174 @@
 package minecraft
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	_ "embed"
-	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
-	"strings"
-	"syscall"
-	"time"
 
+	"github.com/Adirelle/mcvisor/pkg/commands"
+	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
-	"github.com/apex/log"
+	"github.com/thejerf/suture/v4"
+	"golang.org/x/exp/slices"
 )
 
 type (
 	Server struct {
 		*Config
+		Status
+		Target
+
 		dispatcher *events.Dispatcher
+		*process
+		targets  chan Target
+		commands chan *commands.Command
+		pings    chan PingerEvent
 	}
 
-	ServerEvent struct {
-		Status
-	}
+	Status string
+
+	Target string
 )
 
-//go:embed log4j.xml
-var log4jFile []byte
+const (
+	Stopped     Status = "stopped"
+	Starting    Status = "starting"
+	Started     Status = "started"
+	Ready       Status = "ready"
+	Unreachable Status = "unreachable"
+	Stopping    Status = "stopping"
 
-const ServerStopTimeout = 10 * time.Second
+	StartTarget    Target = "start"
+	StopTarget     Target = "stop"
+	RestartTarget  Target = "restart"
+	ShutdownTarget Target = "shutdown"
+
+	StartCommand    commands.Name = "start"
+	StopCommand     commands.Name = "stop"
+	RestartCommand  commands.Name = "restart"
+	ShutdownCommand commands.Name = "shutdown"
+)
+
+var (
+	commandTargets = map[commands.Name]Target{
+		StartCommand:    StartTarget,
+		StopCommand:     StopTarget,
+		RestartCommand:  RestartTarget,
+		ShutdownCommand: ShutdownTarget,
+	}
+
+	// Interface check
+	_ suture.Service = (*Server)(nil)
+)
+
+func init() {
+	commands.Register(StartCommand, "start the server", discord.ControlCategory)
+	commands.Register(StopCommand, "stop the server", discord.ControlCategory)
+	commands.Register(RestartCommand, "restart the server", discord.ControlCategory)
+	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", discord.AdminCategory)
+}
 
 func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
-	return &Server{conf, dispatcher}
-}
-
-func (s *Server) Serve(ctx context.Context) error {
-	err := s.GenerateLog4JConf()
-	if err != nil {
-		return fmt.Errorf("could not generate log4j.conf: %w", err)
-	}
-
-	s.dispatcher.Dispatch(&ServerEvent{Starting})
-
-	cmd, err := s.Start()
-	if err != nil {
-		log.WithField("cmd", cmd.Args).WithError(err).Error("server.start")
-		return fmt.Errorf("could not start server: %w", err)
-	}
-
-	log.WithField("cmd", cmd.Args).WithField("pid", cmd.Process.Pid).Info("server.started")
-	s.dispatcher.Dispatch(&ServerEvent{Started})
-
-	stoppedCtx, stopped := context.WithCancel(context.Background())
-	go s.HitMan(cmd.Process, ctx, stoppedCtx)
-
-	err = cmd.Wait()
-	stopped()
-
-	log.WithError(err).WithFields(log.Fields{
-		"pid":      cmd.ProcessState.Pid,
-		"exitCode": cmd.ProcessState.ExitCode(),
-	}).Info("server.stopped")
-
-	s.dispatcher.Dispatch(&ServerEvent{Stopped})
-
-	return err
-}
-
-func (s *Server) Start() (*exec.Cmd, error) {
-	cmdLine := s.Command()
-
-	cmd := exec.Command(cmdLine[0], cmdLine[1:]...)
-	cmd.Dir = s.WorkingDir()
-	cmd.Env = s.Env()
-	cmd.Stdin = os.Stdin
-
-	if stdout, err := cmd.StdoutPipe(); err == nil {
-		go s.ParseStdout(stdout)
-	} else {
-		return cmd, err
-	}
-
-	if stderr, err := cmd.StderrPipe(); err == nil {
-		go s.LogStderr(stderr)
-	} else {
-		return cmd, err
-	}
-
-	return cmd, cmd.Start()
-}
-
-func (s *Server) HitMan(process *os.Process, kill context.Context, stoppedCtx context.Context) {
-	select {
-	case <-stoppedCtx.Done():
-		return
-	case <-kill.Done():
-	}
-	s.dispatcher.Dispatch(&ServerEvent{Stopping})
-	err := process.Signal(os.Kill)
-	log.WithField("pid", process.Pid).WithError(err).Info("server.stopping")
-
-	stopTimeout, cleanup := context.WithTimeout(stoppedCtx, 5*time.Second)
-	defer cleanup()
-
-	<-stopTimeout.Done()
-	if stopTimeout.Err() == context.DeadlineExceeded {
-		err = process.Signal(syscall.SIGKILL)
-		log.WithField("pid", process.Pid).WithError(err).Warn("server.kill")
+	return &Server{
+		Config:     conf,
+		Target:     StartTarget,
+		Status:     Stopped,
+		targets:    events.MakeHandler[Target](),
+		commands:   events.MakeHandler[*commands.Command](),
+		pings:      events.MakeHandler[PingerEvent](),
+		dispatcher: dispatcher,
 	}
 }
 
-func (s *Server) ParseStdout(stdout io.ReadCloser) {
-	reader := bufio.NewReader(stdout)
-	buffer := bytes.Buffer{}
+func (s *Server) Serve(ctx context.Context) (err error) {
+	defer s.dispatcher.Subscribe(s.targets).Cancel()
+	defer s.dispatcher.Subscribe(s.commands).Cancel()
+	defer s.dispatcher.Subscribe(s.pings).Cancel()
+
+	var processDone chan struct{}
+
 	for {
-		data, isPrefix, err := reader.ReadLine()
-		if err != nil {
-			return
-		}
-		_, _ = buffer.Write(data)
-		if !isPrefix {
-			var message string
-			if err := json.Unmarshal(buffer.Bytes(), &message); err == nil {
-				log.WithField("output", message).Info("server.stdout")
-			} else {
-				log.WithError(err).WithField("data", buffer.String()).Debug("server.stdout")
+		switch {
+		case s.Target == RestartTarget && s.Status == Stopped:
+			s.setTarget(StartTarget)
+			fallthrough
+		case s.Target.MustStart() && !s.Status.IsOneOf(Starting, Started, Ready, Unreachable):
+			s.setStatus(Starting)
+			if s.process == nil {
+				s.process, err = newProcess(s.Config)
+				if err != nil {
+					return err
+				}
 			}
-			buffer.Reset()
+			if err = s.Start(); err != nil {
+				return err
+			}
+			processDone = s.process.Done
+			s.setStatus(Started)
+		case s.Target.MustStop() && !s.Status.IsOneOf(Stopping, Stopped):
+			if s.process == nil {
+				break
+			}
+			s.setStatus(Stopping)
+			s.process.Stop()
+		case s.Target == ShutdownTarget && s.Status == Stopped:
+			return suture.ErrTerminateSupervisorTree
+		default:
+		}
+
+		select {
+		case newTarget := <-s.targets:
+			s.setTarget(newTarget)
+		case ping := <-s.pings:
+			if ping.IsSuccess() && s.Status.IsOneOf(Started, Unreachable) {
+				s.setStatus(Ready)
+			} else if !ping.IsSuccess() && s.Status == Ready {
+				s.setStatus(Unreachable)
+			}
+		case cmd := <-s.commands:
+			if newTarget, found := commandTargets[cmd.Name]; found {
+				s.setTarget(newTarget)
+			}
+		case <-processDone:
+			if s.Err != nil {
+			}
+			processDone = nil
+			s.process = nil
+			s.setStatus(Stopped)
+		case <-ctx.Done():
+			s.setTarget(ShutdownTarget)
 		}
 	}
 }
 
-func (s *Server) LogStderr(stderr io.ReadCloser) {
-	reader := bufio.NewReader(stderr)
-	buffer := strings.Builder{}
-	for {
-		data, isPrefix, err := reader.ReadLine()
-		if err != nil {
-			return
-		}
-		_, _ = buffer.Write(data)
-		if !isPrefix {
-			log.WithField("output", buffer.String()).Error("server.stderr")
-			buffer.Reset()
-		}
+func (s *Server) setStatus(status Status) {
+	if s.Status == status {
+		return
 	}
+	s.Status = status
+	s.dispatcher.Dispatch(status)
 }
 
-func (s *Server) GenerateLog4JConf() error {
-	return os.WriteFile(s.Server.AbsLog4JConf(), log4jFile, os.FileMode(0o644))
+func (s *Server) setTarget(target Target) {
+	if s.Target == target {
+		return
+	}
+	s.Target = target
+	s.dispatcher.Dispatch(target)
+}
+
+func (t Target) MustStart() bool {
+	return t == StartTarget
+}
+
+func (t Target) MustStop() bool {
+	return t == ShutdownTarget || t == StopTarget || t == RestartTarget
+}
+
+func (s Status) IsOneOf(status ...Status) bool {
+	return slices.Contains(status, s)
+}
+
+func (s Status) Notify(writer io.Writer) {
+	_, _ = fmt.Fprintf(writer, "**Server %s**", string(s))
 }

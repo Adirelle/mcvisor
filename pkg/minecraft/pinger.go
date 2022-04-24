@@ -19,6 +19,9 @@ type (
 		*events.Dispatcher
 		lastPing PingerEvent
 		commands chan *commands.Command
+		pings    chan PingerEvent
+		strategy pingStrategy
+		enabled  bool
 	}
 
 	pingStrategy interface {
@@ -80,11 +83,12 @@ func NewPinger(config *ServerConfig, dispatcher *events.Dispatcher) *Pinger {
 		ServerConfig: config,
 		Dispatcher:   dispatcher,
 		commands:     events.MakeHandler[*commands.Command](),
+		pings:        make(chan PingerEvent),
 	}
 }
 
-func (p *Pinger) Serve(ctx context.Context) error {
-	pingStrategy, err := p.getPingStrategy()
+func (p *Pinger) Serve(ctx context.Context) (err error) {
+	p.strategy, err = p.getPingStrategy()
 	if err != nil {
 		log.WithError(err).WithField("path", p.AbsServerProperties()).Error("pinger.config")
 		return err
@@ -103,11 +107,22 @@ func (p *Pinger) Serve(ctx context.Context) error {
 			if cmd.Name == OnlineCommand {
 				p.lastPing.writeReport(cmd.Response)
 			}
-		case when := <-ticker.C:
-			p.lastPing = pingStrategy.Ping(when)
+		case p.lastPing = <-p.pings:
 			log.WithField("result", p.lastPing).Debug("pinger.update")
 			p.Dispatch(p.lastPing)
+		case when := <-ticker.C:
+			go p.Ping(when, ctx)
 		}
+	}
+}
+
+func (p *Pinger) Ping(when time.Time, ctx context.Context) {
+	pingCtx, cleanup := context.WithTimeout(ctx, p.Network.ConnectionTimeout+p.Network.ResponseTimeout)
+	defer cleanup()
+	ping := p.strategy.Ping(when)
+	select {
+	case p.pings <- ping:
+	case <-pingCtx.Done():
 	}
 }
 
