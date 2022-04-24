@@ -1,14 +1,13 @@
 package main
 
 import (
+	"context"
 	stdlog "log"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
-	"github.com/Adirelle/mcvisor/pkg/logging"
 	"github.com/Adirelle/mcvisor/pkg/minecraft"
 	"github.com/apex/log"
 	"github.com/thejerf/suture/v4"
@@ -37,30 +36,6 @@ func main() {
 		stdlog.Fatalf("could not load configuration: %s", err)
 	}
 
-	mainSupervisor, dispatcher := NewMainSupervisor(conf)
-	mainC := mainSupervisor.ServeBackground(nil)
-
-	minecraftSupervisor := NewMinecraftSupervisor(conf, dispatcher)
-	mainSupervisor.Add(minecraftSupervisor)
-
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Kill, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-
-	for {
-		select {
-		case sig := <-signals:
-			log.WithField("signal", sig).Warn("signal.received")
-			dispatcher.Dispatch(minecraft.ShutdownTarget)
-		case err := <-mainC:
-			if err != nil && err != suture.ErrTerminateSupervisorTree {
-				stdlog.Fatalf("error: %s", err)
-			}
-			os.Exit(0)
-		}
-	}
-}
-
-func NewMainSupervisor(conf *Config) (*suture.Supervisor, *events.Dispatcher) {
 	supervisor := suture.New("main", suture.Spec{
 		EventHook: suture.EventHook(func(event suture.Event) {
 			log.
@@ -69,25 +44,16 @@ func NewMainSupervisor(conf *Config) (*suture.Supervisor, *events.Dispatcher) {
 				Warnf("suture.%s", SutureEventLabels[event.Type()])
 		}),
 	})
+	spvDone := supervisor.ServeBackground(context.Background())
 
-	SetUpLogging(conf.Logging, supervisor)
-
-	dispatcher := events.NewDispatcher()
-
-	return supervisor, dispatcher
-}
-
-func SetUpLogging(conf *logging.Config, supervisor *suture.Supervisor) {
-	var service suture.Service
-	def := log.Log.(*log.Logger)
-	def.Handler, def.Level, service = conf.CreateLogging()
+	handler, level, service := conf.Logging.CreateLogging()
+	log.SetHandler(handler)
+	log.SetLevel(level)
 	if service != nil {
 		supervisor.Add(service)
 	}
-}
 
-func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture.Supervisor {
-	supervisor := suture.NewSimple("minecraft")
+	dispatcher := events.NewDispatcher()
 
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	supervisor.Add(bot)
@@ -98,31 +64,19 @@ func NewMinecraftSupervisor(conf *Config, dispatcher *events.Dispatcher) *suture
 	pinger := minecraft.NewPinger(conf.Minecraft.Server, dispatcher)
 	supervisor.Add(pinger)
 
-	return supervisor
-}
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Kill, os.Interrupt)
 
-func (c *serverControl) Start() {
-	if c.token != nil {
-		return
+	for {
+		select {
+		case sig := <-signals:
+			log.WithField("signal", sig).Warn("signal.received")
+			dispatcher.Dispatch(minecraft.ShutdownTarget)
+		case err := <-spvDone:
+			if err != nil && err != suture.ErrTerminateSupervisorTree {
+				stdlog.Fatalf("error: %s", err)
+			}
+			os.Exit(0)
+		}
 	}
-	log.Info("server.enable")
-	token := c.supervisor.Add(c.server)
-	c.token = &token
-}
-
-func (c *serverControl) Stop() {
-	if c.token == nil {
-		return
-	}
-	log.Info("server.disable")
-	err := c.supervisor.RemoveAndWait(*c.token, 0)
-	if err != nil {
-		log.WithError(err).Error("server.disable")
-	}
-	c.token = nil
-}
-
-func (c *serverControl) Terminate() {
-	log.Info("server.shutdown")
-	c.stop()
 }
