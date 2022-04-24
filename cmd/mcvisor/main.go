@@ -64,7 +64,7 @@ func main() {
 	server := minecraft.NewServer(conf.Minecraft, dispatcher)
 	supervisor.Add(server)
 
-	pinger := minecraft.NewPinger(conf.Minecraft.Server, dispatcher)
+	pinger := minecraft.NewPinger(conf.Minecraft.Server, server, dispatcher)
 	supervisor.Add(pinger)
 
 	signals := make(chan os.Signal, 1)

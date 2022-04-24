@@ -59,6 +59,7 @@ var (
 
 	// Interface check
 	_ suture.Service = (*Server)(nil)
+	_ Statuser       = (*Server)(nil)
 )
 
 func init() {
@@ -140,6 +141,10 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 	}
 }
 
+func (s *Server) Status() Status {
+	return s.status
+}
+
 func (s *Server) setStatus(status Status) {
 	if s.status == status {
 		return
@@ -187,6 +192,10 @@ func (t Target) MustStop() bool {
 
 func (s Status) IsOneOf(status ...Status) bool {
 	return slices.Contains(status, s)
+}
+
+func (s Status) IsRunning() bool {
+	return s == Started || s == Ready || s == Unreachable
 }
 
 func (s Status) Notify(writer io.Writer) {

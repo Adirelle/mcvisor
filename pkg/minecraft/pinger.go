@@ -18,10 +18,14 @@ type (
 		*ServerConfig
 		*events.Dispatcher
 		lastPing PingerEvent
+		statuser Statuser
 		commands chan *commands.Command
 		pings    chan PingerEvent
 		strategy pingStrategy
-		enabled  bool
+	}
+
+	Statuser interface {
+		Status() Status
 	}
 
 	pingStrategy interface {
@@ -78,10 +82,11 @@ func init() {
 	commands.Register(OnlineCommand, "list online players", discord.QueryCategory)
 }
 
-func NewPinger(config *ServerConfig, dispatcher *events.Dispatcher) *Pinger {
+func NewPinger(config *ServerConfig, statuser Statuser, dispatcher *events.Dispatcher) *Pinger {
 	return &Pinger{
 		ServerConfig: config,
 		Dispatcher:   dispatcher,
+		statuser:     statuser,
 		commands:     events.MakeHandler[*commands.Command](),
 		pings:        make(chan PingerEvent),
 	}
@@ -111,7 +116,9 @@ func (p *Pinger) Serve(ctx context.Context) (err error) {
 			log.WithField("result", p.lastPing).Debug("pinger.update")
 			p.Dispatch(p.lastPing)
 		case when := <-ticker.C:
-			go p.Ping(when, ctx)
+			if p.statuser.Status().IsRunning() {
+				go p.Ping(when, ctx)
+			}
 		}
 	}
 }
