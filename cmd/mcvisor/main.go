@@ -70,16 +70,19 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Kill, os.Interrupt)
 
-	for {
-		select {
-		case sig := <-signals:
+	go func() {
+		if sig, open := <-signals; open {
 			log.WithField("signal", sig).Warn("signal.received")
-			dispatcher.Dispatch(minecraft.ShutdownTarget)
-		case err := <-spvDone:
-			if err != nil && err != suture.ErrTerminateSupervisorTree {
-				stdlog.Fatalf("error: %s", err)
-			}
-			os.Exit(0)
+			server.Shutdown()
 		}
+	}()
+
+	server.Start()
+
+	err = <-spvDone
+	close(signals)
+	if err != nil && err != suture.ErrTerminateSupervisorTree {
+		stdlog.Fatalf("error: %s", err)
 	}
+	os.Exit(0)
 }

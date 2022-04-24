@@ -15,14 +15,14 @@ import (
 type (
 	Server struct {
 		*Config
-		Status
-		Target
 
 		dispatcher *events.Dispatcher
-		*process
-		targets  chan Target
-		commands chan *commands.Command
-		pings    chan PingerEvent
+		status     Status
+		target     Target
+		process    *process
+		targets    chan Target
+		commands   chan *commands.Command
+		pings      chan PingerEvent
 	}
 
 	Status string
@@ -71,8 +71,8 @@ func init() {
 func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
 	return &Server{
 		Config:     conf,
-		Target:     StartTarget,
-		Status:     Stopped,
+		target:     StopTarget,
+		status:     Stopped,
 		targets:    events.MakeHandler[Target](),
 		commands:   events.MakeHandler[*commands.Command](),
 		pings:      events.MakeHandler[PingerEvent](),
@@ -89,10 +89,9 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 
 	for {
 		switch {
-		case s.Target == RestartTarget && s.Status == Stopped:
-			s.setTarget(StartTarget)
-			fallthrough
-		case s.Target.MustStart() && !s.Status.IsOneOf(Starting, Started, Ready, Unreachable):
+		case s.target == RestartTarget && s.status == Stopped:
+			s.targets <- StartTarget
+		case s.target.MustStart() && !s.status.IsOneOf(Starting, Started, Ready, Unreachable):
 			s.setStatus(Starting)
 			if s.process == nil {
 				s.process, err = newProcess(s.Config)
@@ -100,18 +99,18 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 					return err
 				}
 			}
-			if err = s.Start(); err != nil {
+			if err = s.process.Start(); err != nil {
 				return err
 			}
 			processDone = s.process.Done
 			s.setStatus(Started)
-		case s.Target.MustStop() && !s.Status.IsOneOf(Stopping, Stopped):
+		case s.target.MustStop() && !s.status.IsOneOf(Stopping, Stopped):
 			if s.process == nil {
 				break
 			}
 			s.setStatus(Stopping)
 			s.process.Stop()
-		case s.Target == ShutdownTarget && s.Status == Stopped:
+		case s.target == ShutdownTarget && s.status == Stopped:
 			return suture.ErrTerminateSupervisorTree
 		default:
 		}
@@ -120,40 +119,48 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 		case newTarget := <-s.targets:
 			s.setTarget(newTarget)
 		case ping := <-s.pings:
-			if ping.IsSuccess() && s.Status.IsOneOf(Started, Unreachable) {
+			if ping.IsSuccess() && s.status.IsOneOf(Started, Unreachable) {
 				s.setStatus(Ready)
-			} else if !ping.IsSuccess() && s.Status == Ready {
+			} else if !ping.IsSuccess() && s.status == Ready {
 				s.setStatus(Unreachable)
 			}
 		case cmd := <-s.commands:
 			if newTarget, found := commandTargets[cmd.Name]; found {
-				s.setTarget(newTarget)
+				s.targets <- newTarget
 			}
 		case <-processDone:
-			if s.Err != nil {
+			if s.process.Err != nil {
 			}
 			processDone = nil
 			s.process = nil
 			s.setStatus(Stopped)
 		case <-ctx.Done():
-			s.setTarget(ShutdownTarget)
+			s.Shutdown()
 		}
 	}
 }
 
 func (s *Server) setStatus(status Status) {
-	if s.Status == status {
+	if s.status == status {
 		return
 	}
-	s.Status = status
+	s.status = status
 	s.dispatcher.Dispatch(status)
 }
 
+func (s *Server) Start() {
+	s.targets <- StartTarget
+}
+
+func (s *Server) Shutdown() {
+	s.targets <- ShutdownTarget
+}
+
 func (s *Server) setTarget(target Target) {
-	if s.Target == target {
+	if s.target == target {
 		return
 	}
-	s.Target = target
+	s.target = target
 	s.dispatcher.Dispatch(target)
 }
 
