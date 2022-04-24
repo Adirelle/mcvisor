@@ -73,7 +73,6 @@ func NewMainSupervisor(conf *Config) (*suture.Supervisor, *events.Dispatcher) {
 	SetUpLogging(conf.Logging, supervisor)
 
 	dispatcher := events.NewDispatcher()
-	supervisor.Add(dispatcher)
 
 	return supervisor, dispatcher
 }
