@@ -49,7 +49,6 @@ func main() {
 	bot := discord.NewBot(*conf.Discord, dispatcher)
 	if bot.IsEnabled() {
 		supervisor.Add(bot)
-		<-bot.Ready()
 	}
 
 	server := minecraft.NewServer(conf.Minecraft, dispatcher)
@@ -67,6 +66,10 @@ func main() {
 			server.Shutdown()
 		}
 	}()
+
+	if bot.IsEnabled() {
+		<-bot.Ready()
+	}
 
 	server.Start()
 
