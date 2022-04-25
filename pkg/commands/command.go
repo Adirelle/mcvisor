@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/apex/log"
@@ -14,36 +12,32 @@ type (
 	Definition struct {
 		Name
 		Description string
-		Category
+		Permission
+		Handler
 	}
 
 	Command struct {
 		Name
 		Arguments []string
 		Actor
-		Response chan<- string
 	}
+
+	Handler interface {
+		HandleCommand(*Command) (string, error)
+	}
+
+	HandlerFunc func(*Command) (string, error)
 )
 
 var (
-	Definitions       = make(map[Name]*Definition, 10)
-	MaxCommandNameLen = 0
-
-	ErrUnknownCommand = errors.New("unknown command")
-
 	// interface checks
 	_ log.Fielder = (*Command)(nil)
+	_ Handler     = (*HandlerFunc)(nil)
 )
 
-func Register(name Name, description string, category Category) {
-	RegisterDefinition(Definition{name, description, category})
-}
-
-func RegisterDefinition(def Definition) {
-	Definitions[def.Name] = &def
-	if l := len(def.Name); l > MaxCommandNameLen {
-		MaxCommandNameLen = l
-	}
+func NewCommand(line string, actor Actor) *Command {
+	words := strings.Split(line, " ")
+	return &Command{Name(words[0]), words[1:], actor}
 }
 
 func (c *Command) String() string {
@@ -63,26 +57,6 @@ func (c *Command) Fields() log.Fields {
 	return fields
 }
 
-func ParseCommand(line string, actor Actor, response chan<- string) (cmd *Command, err error) {
-	defer func() {
-		if err != nil {
-			response <- fmt.Sprintf("**%s**", err)
-			close(response)
-		}
-	}()
-
-	words := strings.Split(line, " ")
-	name := Name(words[0])
-	def, found := Definitions[name]
-	if !found {
-		err = ErrUnknownCommand
-		return
-	}
-
-	cmd = &Command{def.Name, words[1:], actor, response}
-	if !IsAllowed(def.Category, actor) {
-		err = ErrPermissionDenied
-	}
-
-	return
+func (f HandlerFunc) HandleCommand(cmd *Command) (string, error) {
+	return f(cmd)
 }

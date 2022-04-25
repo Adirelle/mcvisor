@@ -2,7 +2,10 @@ package minecraft
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
@@ -19,7 +22,6 @@ type (
 		*events.Dispatcher
 		lastPing PingerEvent
 		statuser Statuser
-		commands chan *commands.Command
 		pings    chan PingerEvent
 		strategy pingStrategy
 	}
@@ -45,7 +47,6 @@ type (
 
 	PingerEvent interface {
 		IsSuccess() bool
-		writeReport(chan<- string)
 	}
 
 	PingSucceeded struct {
@@ -60,8 +61,6 @@ type (
 		When   time.Time
 		Reason error
 	}
-
-	PingDisabled time.Time
 )
 
 const (
@@ -70,26 +69,33 @@ const (
 
 var (
 	// Interface checks
-	_ PingerEvent  = (*PingSucceeded)(nil)
-	_ PingerEvent  = (*PingFailed)(nil)
-	_ PingerEvent  = PingDisabled(time.Now())
+	_ PingerEvent = (*PingSucceeded)(nil)
+	_ PingerEvent = (*PingFailed)(nil)
+
 	_ pingStrategy = (*statusPingStrategy)(nil)
 	_ pingStrategy = (*queryPingSrategy)(nil)
 	_ pingStrategy = nullPingStrategy(time.Now())
+
+	_ fmt.Stringer = (*PingSucceeded)(nil)
+	_ error        = (*PingFailed)(nil)
+
+	builderPool = &sync.Pool{
+		New: func() any { return &strings.Builder{} },
+	}
+
+	ErrPingDisabled = errors.New("both query and status are disabled server-side")
+	ErrPingNever    = errors.New("status unknown")
 )
 
-func init() {
-	commands.Register(OnlineCommand, "list online players", discord.QueryCategory)
-}
-
 func NewPinger(config *ServerConfig, statuser Statuser, dispatcher *events.Dispatcher) *Pinger {
-	return &Pinger{
+	p := &Pinger{
 		ServerConfig: config,
 		Dispatcher:   dispatcher,
 		statuser:     statuser,
-		commands:     events.MakeHandler[*commands.Command](),
 		pings:        make(chan PingerEvent),
 	}
+	commands.Register(OnlineCommand, "list online players", discord.QueryCategory, commands.HandlerFunc(p.handleOnlineCommand))
+	return p
 }
 
 func (p *Pinger) Serve(ctx context.Context) (err error) {
@@ -99,8 +105,6 @@ func (p *Pinger) Serve(ctx context.Context) (err error) {
 		return err
 	}
 
-	defer p.Subscribe(p.commands).Cancel()
-
 	ticker := time.NewTicker(p.Network.PingPeriod)
 	defer ticker.Stop()
 
@@ -108,18 +112,27 @@ func (p *Pinger) Serve(ctx context.Context) (err error) {
 		select {
 		case <-ctx.Done():
 			return nil
-		case cmd := <-p.commands:
-			if cmd.Name == OnlineCommand {
-				p.lastPing.writeReport(cmd.Response)
-			}
 		case p.lastPing = <-p.pings:
 			log.WithField("result", p.lastPing).Debug("pinger.update")
 			p.Dispatch(p.lastPing)
 		case when := <-ticker.C:
 			if p.statuser.Status().IsRunning() {
 				go p.Ping(when, ctx)
+			} else {
+				p.lastPing = &PingFailed{when, ErrPingNever}
 			}
 		}
+	}
+}
+
+func (p *Pinger) handleOnlineCommand(cmd *commands.Command) (string, error) {
+	switch ping := p.lastPing.(type) {
+	case error:
+		return "", ping
+	case fmt.Stringer:
+		return ping.String(), nil
+	default:
+		return "", nil
 	}
 }
 
@@ -188,8 +201,8 @@ func (p *statusPingStrategy) Ping(when time.Time) PingerEvent {
 	}
 }
 
-func (p nullPingStrategy) Ping(_ time.Time) PingerEvent {
-	return PingDisabled(p)
+func (p nullPingStrategy) Ping(when time.Time) PingerEvent {
+	return PingFailed{when, ErrPingDisabled}
 }
 
 func (PingSucceeded) IsSuccess() bool {
@@ -205,14 +218,19 @@ func (p *PingSucceeded) Fields() log.Fields {
 	}
 }
 
-func (p *PingSucceeded) writeReport(response chan<- string) {
-	defer close(response)
-	response <- fmt.Sprintf("Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
+func (p *PingSucceeded) String() string {
+	builder := builderPool.Get().(*strings.Builder)
+	defer func() {
+		builder.Reset()
+		builderPool.Put(builder)
+	}()
+	_, _ = fmt.Fprintf(builder, "Online players: %d/%d (<t:%d:R>)", p.OnlinePlayers, p.MaxPlayers, p.When.Unix())
 	if len(p.PlayerList) > 0 {
 		for _, name := range p.PlayerList {
-			response <- fmt.Sprintf("\n- %s", name)
+			_, _ = fmt.Fprintf(builder, "\n- %s", name)
 		}
 	}
+	return builder.String()
 }
 
 func (PingFailed) IsSuccess() bool {
@@ -223,20 +241,6 @@ func (p *PingFailed) Fields() log.Fields {
 	return log.Fields{"error": p.Reason}
 }
 
-func (p *PingFailed) writeReport(response chan<- string) {
-	defer close(response)
-	response <- "**last ping failed**"
-}
-
-func (PingDisabled) IsSuccess() bool {
-	return false
-}
-
-func (PingDisabled) Fields() log.Fields {
-	return nil
-}
-
-func (PingDisabled) writeReport(response chan<- string) {
-	defer close(response)
-	response <- "**both status and query are disabled in server configuration**"
+func (p *PingFailed) Error() string {
+	return fmt.Sprintf("error: %s", p.Reason.Error())
 }

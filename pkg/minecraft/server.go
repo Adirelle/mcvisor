@@ -28,6 +28,11 @@ type (
 	Status string
 
 	Target string
+
+	targetSetter struct {
+		target Target
+		server *Server
+	}
 )
 
 const (
@@ -51,40 +56,34 @@ const (
 )
 
 var (
-	commandTargets = map[commands.Name]Target{
-		StartCommand:    StartTarget,
-		StopCommand:     StopTarget,
-		RestartCommand:  RestartTarget,
-		ShutdownCommand: ShutdownTarget,
-	}
-
 	// Interface check
-	_ suture.Service = (*Server)(nil)
-	_ Statuser       = (*Server)(nil)
+	_ suture.Service   = (*Server)(nil)
+	_ Statuser         = (*Server)(nil)
+	_ commands.Handler = (*targetSetter)(nil)
 )
 
 func init() {
-	commands.Register(StartCommand, "start the server", discord.ControlCategory)
-	commands.Register(StopCommand, "stop the server", discord.ControlCategory)
-	commands.Register(RestartCommand, "restart the server", discord.ControlCategory)
-	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", discord.AdminCategory)
 }
 
 func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
-	return &Server{
+	s := &Server{
 		Config:     conf,
 		target:     StopTarget,
 		status:     Stopped,
 		targets:    events.MakeHandler[Target](),
-		commands:   events.MakeHandler[*commands.Command](),
 		pings:      events.MakeHandler[PingerEvent](),
 		dispatcher: dispatcher,
 	}
+	commands.Register(StartCommand, "start the server", discord.ControlCategory, &targetSetter{StartTarget, s})
+	commands.Register(StopCommand, "stop the server", discord.ControlCategory, &targetSetter{StopTarget, s})
+	commands.Register(RestartCommand, "restart the server", discord.ControlCategory, &targetSetter{RestartTarget, s})
+	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", discord.AdminCategory, &targetSetter{ShutdownTarget, s})
+	commands.Register(StatusCommand, "show serve status", discord.QueryCategory, commands.HandlerFunc(s.handleStatusCommand))
+	return s
 }
 
 func (s *Server) Serve(ctx context.Context) (err error) {
 	defer s.dispatcher.Subscribe(s.targets).Cancel()
-	defer s.dispatcher.Subscribe(s.commands).Cancel()
 	defer s.dispatcher.Subscribe(s.pings).Cancel()
 
 	var processDone chan struct{}
@@ -126,15 +125,6 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 			} else if !ping.IsSuccess() && s.status == Ready {
 				s.setStatus(Unreachable)
 			}
-		case cmd := <-s.commands:
-			if newTarget, found := commandTargets[cmd.Name]; found {
-				s.targets <- newTarget
-				close(cmd.Response)
-			}
-			if cmd.Name == StatusCommand {
-				cmd.Response <- fmt.Sprintf("Server %s", s.status)
-				close(cmd.Response)
-			}
 		case <-processDone:
 			if s.process.Err != nil {
 			}
@@ -175,10 +165,14 @@ func (s *Server) setTarget(target Target) {
 	s.dispatcher.Dispatch(target)
 }
 
+func (s *Server) handleStatusCommand(cmd *commands.Command) (string, error) {
+	return fmt.Sprintf("Server %s", s.status), nil
+}
+
 func (t Target) Notify(writer io.Writer) {
 	switch t {
 	case RestartTarget:
-		_, _ = io.WriteString(writer, "**Restarting the servr**")
+		_, _ = io.WriteString(writer, "**Restarting the server**")
 	case StartTarget:
 		_, _ = io.WriteString(writer, "**Starting the server**")
 	case StopTarget:
@@ -194,6 +188,11 @@ func (t Target) MustStart() bool {
 
 func (t Target) MustStop() bool {
 	return t == ShutdownTarget || t == StopTarget || t == RestartTarget
+}
+
+func (s *targetSetter) HandleCommand(cmd *commands.Command) (string, error) {
+	s.server.setTarget(s.target)
+	return "", nil
 }
 
 func (s Status) IsOneOf(status ...Status) bool {

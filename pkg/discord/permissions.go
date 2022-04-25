@@ -1,12 +1,8 @@
 package discord
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/apex/log"
-	"github.com/bwmarrin/discordgo"
 	"golang.org/x/exp/slices"
 )
 
@@ -16,6 +12,8 @@ type (
 		Control PermissionList `json:"control,omitempty"`
 		Query   PermissionList `json:"query,omitempty"`
 		Public  PermissionList `json:"public,omitempty"`
+
+		asList []PermissionList
 	}
 
 	PermissionList []PermissionItem
@@ -26,202 +24,67 @@ type (
 		ChannelID *Snowflake `json:"channelId,omitempty" validate:"omitempty,required_without_all=User Role"`
 	}
 
-	Permission interface {
-		commands.Permission
-		ForEachUser(func(Snowflake))
-		ForEachRole(func(Snowflake))
-		ForEachChannel(func(Snowflake))
+	actor struct {
+		UserID    string
+		ChannelID string
+		RoleIDs   []string
+		*Permissions
 	}
 
-	Actor interface {
-		commands.Actor
-		IsUser(Snowflake) bool
-		HasRole(Snowflake) bool
-		InChannel(Snowflake) bool
-	}
-
-	messageActor struct {
-		*discordgo.Message
-	}
-)
-
-const (
-	AdminCategory   commands.Category = "admin"
-	ControlCategory commands.Category = "control"
-	QueryCategory   commands.Category = "query"
-	PublicCategory  commands.Category = "public"
+	category int
 )
 
 var (
+	PublicCategory  commands.Permission = category(0)
+	QueryCategory   commands.Permission = category(1)
+	ControlCategory commands.Permission = category(2)
+	AdminCategory   commands.Permission = category(3)
+
 	// Interface checks
-	_ Permission  = (*Permissions)(nil)
-	_ Permission  = (*PermissionList)(nil)
-	_ Permission  = (*PermissionItem)(nil)
-	_ Actor       = (*messageActor)(nil)
-	_ log.Fielder = (*messageActor)(nil)
+	_ commands.Actor = (*actor)(nil)
+	_ log.Fielder    = (*actor)(nil)
 )
 
-func (p *Permissions) IsAllowed(category commands.Category, actor commands.Actor) bool {
-	switch category {
-	case PublicCategory:
-		if p.Public.IsAllowed(category, actor) {
-			return true
-		}
-		fallthrough
-	case QueryCategory:
-		if p.Query.IsAllowed(category, actor) {
-			return true
-		}
-		fallthrough
-	case ControlCategory:
-		if p.Control.IsAllowed(category, actor) {
-			return true
-		}
-		fallthrough
-	case AdminCategory:
-		if p.Admin.IsAllowed(category, actor) {
+func (p *Permissions) IsAllowed(category category, actor *actor) bool {
+	for _, list := range p.AsList()[category:] {
+		if list.IsAllowed(actor) {
 			return true
 		}
 	}
 	return false
 }
 
-func (p *Permissions) Explain(category commands.Category, tell func(string)) {
-	switch category {
-	case PublicCategory:
-		p.Public.Explain(category, tell)
-		fallthrough
-	case QueryCategory:
-		p.Query.Explain(category, tell)
-		fallthrough
-	case ControlCategory:
-		p.Control.Explain(category, tell)
-		fallthrough
-	case AdminCategory:
-		p.Admin.Explain(category, tell)
+func (p *Permissions) AsList() []PermissionList {
+	if p.asList == nil {
+		p.asList = []PermissionList{p.Public, p.Query, p.Control, p.Admin}
 	}
+	return p.asList
 }
 
-func (p *Permissions) ForEachUser(visit func(Snowflake)) {
-	p.Public.ForEachUser(visit)
-	p.Query.ForEachUser(visit)
-	p.Control.ForEachUser(visit)
-	p.Admin.ForEachUser(visit)
-}
-
-func (p *Permissions) ForEachRole(visit func(Snowflake)) {
-	p.Public.ForEachRole(visit)
-	p.Query.ForEachRole(visit)
-	p.Control.ForEachRole(visit)
-	p.Admin.ForEachRole(visit)
-}
-
-func (p *Permissions) ForEachChannel(visit func(Snowflake)) {
-	p.Public.ForEachChannel(visit)
-	p.Query.ForEachChannel(visit)
-	p.Control.ForEachChannel(visit)
-	p.Admin.ForEachChannel(visit)
-}
-
-func (l PermissionList) IsAllowed(category commands.Category, actor commands.Actor) bool {
+func (l PermissionList) IsAllowed(actor *actor) bool {
 	for _, item := range l {
-		if !item.IsAllowed(category, actor) {
-			return false
+		if item.IsAllowed(actor) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
-func (l PermissionList) Explain(category commands.Category, tell func(string)) {
-	for _, item := range l {
-		item.Explain(category, tell)
-	}
+func (i PermissionItem) IsAllowed(actor *actor) bool {
+	return i.UserID.EqualString(actor.UserID) ||
+		i.ChannelID.EqualString(actor.ChannelID) ||
+		slices.IndexFunc(actor.RoleIDs, i.RoleID.EqualString) != -1
 }
 
-func (l PermissionList) ForEachUser(visit func(Snowflake)) {
-	for _, item := range l {
-		item.ForEachUser(visit)
-	}
+func (a *actor) HasPermission(permission commands.Permission) bool {
+	cat, ok := permission.(category)
+	return permission == commands.AllowAll || (ok && a.Permissions.IsAllowed(cat, a))
 }
 
-func (l PermissionList) ForEachRole(visit func(Snowflake)) {
-	for _, item := range l {
-		item.ForEachRole(visit)
-	}
-}
-
-func (l PermissionList) ForEachChannel(visit func(Snowflake)) {
-	for _, item := range l {
-		item.ForEachChannel(visit)
-	}
-}
-
-func (i PermissionItem) IsAllowed(_ commands.Category, cmdActor commands.Actor) bool {
-	actor, isActor := cmdActor.(Actor)
-	return isActor && ((i.UserID != nil && actor.IsUser(*i.UserID)) ||
-		(i.RoleID != nil && actor.HasRole(*i.RoleID)) ||
-		(i.ChannelID != nil && actor.InChannel(*i.ChannelID)))
-}
-
-func (i PermissionItem) Explain(category commands.Category, tell func(string)) {
-	parts := make([]string, 0, 3)
-	if i.UserID != nil {
-		parts = append(parts, fmt.Sprintf("<@%s>", *i.UserID))
-	}
-	if i.RoleID != nil {
-		parts = append(parts, fmt.Sprintf("<@&%s>", *i.RoleID))
-	}
-	if i.ChannelID != nil {
-		parts = append(parts, fmt.Sprintf("<#%s>", *i.ChannelID))
-	}
-	if len(parts) >= 0 {
-		tell(strings.Join(parts, "&"))
-	}
-}
-
-func (i PermissionItem) ForEachUser(visit func(Snowflake)) {
-	if i.UserID != nil {
-		visit(*i.UserID)
-	}
-}
-
-func (i PermissionItem) ForEachRole(visit func(Snowflake)) {
-	if i.RoleID != nil {
-		visit(*i.RoleID)
-	}
-}
-
-func (i PermissionItem) ForEachChannel(visit func(Snowflake)) {
-	if i.ChannelID != nil {
-		visit(*i.ChannelID)
-	}
-}
-
-func (a *messageActor) IsUser(userID Snowflake) bool {
-	return a.Author.ID == string(userID)
-}
-
-func (a *messageActor) HasRole(roleID Snowflake) bool {
-	return a.Member != nil && slices.Contains(a.Member.Roles, string(roleID))
-}
-
-func (a *messageActor) InChannel(channelID Snowflake) bool {
-	return a.ChannelID == string(channelID)
-}
-
-func (a *messageActor) GoString() string {
-	return fmt.Sprintf("Message(content=%q, author=%q)", a.Content, a.Author.Username)
-}
-
-func (a *messageActor) Fields() log.Fields {
-	fields := log.Fields{
-		"author":    a.Author.Username,
+func (a *actor) Fields() log.Fields {
+	return log.Fields{
+		"userId":    a.UserID,
 		"channelID": a.ChannelID,
+		"roleIDs":   a.RoleIDs,
 	}
-	if a.Member != nil {
-		fields["roleIDs"] = a.Member.Roles
-	} else {
-		fields["roleIDs"] = nil
-	}
-	return fields
 }

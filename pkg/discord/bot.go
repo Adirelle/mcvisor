@@ -23,16 +23,13 @@ type (
 )
 
 func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
-	b := &Bot{
+	return &Bot{
 		Config:     config,
 		dispatcher: dispatcher,
-		commands:   events.MakeHandler[*commands.Command](),
 		messages:   events.MakeHandler[*discordgo.Message](),
 		notifiers:  events.MakeHandler[Notifier](),
 		ready:      make(chan struct{}),
 	}
-	commands.PushPermissions(b.Permissions)
-	return b
 }
 
 func (b *Bot) IsEnabled() bool {
@@ -55,13 +52,6 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 
 	for {
 		select {
-		case cmd := <-b.commands:
-			switch cmd.Name {
-			case PermsCommand:
-				b.HandlePermCommand(cmd)
-			case HelpCommand:
-				b.HandleHelpCommand(cmd)
-			}
 		case msg := <-b.messages:
 			b.HandleMessage(msg, ctx)
 		case notifier := <-b.notifiers:
@@ -105,7 +95,7 @@ func (b *Bot) connect(ctx context.Context) (err error) {
 	if err = b.Open(); err != nil {
 		return
 	}
-	log.Debug("discord.bot.connected")
+	log.Debug("discord.connected")
 
 	select {
 	case ready := <-readyC:
@@ -113,7 +103,7 @@ func (b *Bot) connect(ctx context.Context) (err error) {
 		if err == nil {
 			err = b.checkChannels(ready)
 		}
-		log.WithField("username", ready.User.Username).Info("discord.bot.ready")
+		log.WithField("username", ready.User.Username).Info("discord.ready")
 	case <-ctx.Done():
 	}
 	close(b.ready)
@@ -127,17 +117,17 @@ func (b *Bot) checkGuildMembership(ready *discordgo.Ready) error {
 		logger := log.WithField("serverId", guild.ID)
 		if guild.ID != string(b.GuildID) {
 			if err := b.Session.GuildLeave(guild.ID); err == nil {
-				logger.Warn("discord.bot.server.leave")
+				logger.Warn("discord.server.leave")
 			} else {
-				logger.WithError(err).Error("discord.bot.server.leave")
+				logger.WithError(err).Error("discord.server.leave")
 			}
 		} else {
-			logger.Info("discord.bot.server.member")
+			logger.Info("discord.server.member")
 			found = true
 		}
 	}
 	if !found {
-		log.WithField("serverId", b.GuildID).Error("discord.bot.server.not_member")
+		log.WithField("serverId", b.GuildID).Error("discord.server.not_member")
 	}
 	return nil
 }
@@ -147,9 +137,6 @@ func (b *Bot) checkChannels(ready *discordgo.Ready) error {
 	for _, id := range b.ChannelIDs {
 		channelIDs[string(id)] = false
 	}
-	b.Permissions.ForEachChannel(func(id Snowflake) {
-		channelIDs[string(id)] = false
-	})
 	channels, err := b.Session.GuildChannels(b.GuildID.String())
 	logger := log.WithField("serverId", b.GuildID)
 	if err != nil {
@@ -163,11 +150,11 @@ func (b *Bot) checkChannels(ready *discordgo.Ready) error {
 				"serverId":    channel.GuildID,
 			})
 			delete(channelIDs, channel.ID)
-			logger.WithField("channelId", channel.ID).Debug("discord.bot.channel.found")
+			logger.WithField("channelId", channel.ID).Debug("discord.channel.found")
 		}
 	}
 	for id := range channelIDs {
-		logger.WithField("channelId", id).Warn("discord.bot.channel.not_found")
+		logger.WithField("channelId", id).Warn("discord.channel.not_found")
 	}
 	return nil
 }

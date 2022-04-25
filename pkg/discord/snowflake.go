@@ -8,7 +8,9 @@ import (
 
 // Discord snowflake
 // cf https://discord.com/developers/docs/reference#snowflakes
-type Snowflake string
+type (
+	Snowflake string
+)
 
 const (
 	// The first second of the Discord epoch
@@ -17,11 +19,21 @@ const (
 
 var ErrInvalidSnowflake = errors.New("invalid snowflake")
 
-func (s Snowflake) String() string {
-	return string(s)
+func (s *Snowflake) String() string {
+	if s == nil {
+		return ""
+	}
+	return string(*s)
 }
 
-func (s Snowflake) GoString() string {
+func (s *Snowflake) EqualString(value string) bool {
+	return s != nil && string(*s) == value
+}
+
+func (s *Snowflake) GoString() string {
+	if s == nil {
+		return "nil"
+	}
 	return "<snowflake>"
 }
 
