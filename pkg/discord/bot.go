@@ -2,6 +2,8 @@ package discord
 
 import (
 	"context"
+	_ "embed"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/Adirelle/mcvisor/pkg/events"
@@ -20,6 +22,9 @@ type (
 		statuses      chan StatusProvider
 	}
 )
+
+//go:embed logo.png
+var avatarBinary []byte
 
 func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
 	return &Bot{
@@ -104,7 +109,14 @@ func (b *Bot) connect(ctx context.Context) (err error) {
 		if err == nil {
 			err = b.checkChannels(ready)
 		}
-		log.WithField("username", ready.User.Username).Info("discord.ready")
+		log.WithField("username", ready.User.Username).WithField("avatar", ready.User.Avatar).Info("discord.ready")
+		if err == nil {
+			user, updateErr := b.Session.UserUpdate(
+				ready.User.Username,
+				fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(avatarBinary)),
+			)
+			log.WithError(updateErr).WithField("user", user).Debug("discord.user.update")
+		}
 	case <-ctx.Done():
 	}
 	close(b.ready)
