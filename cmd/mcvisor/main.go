@@ -13,15 +13,6 @@ import (
 	"github.com/thejerf/suture/v4"
 )
 
-type (
-	serverControl struct {
-		supervisor *suture.Supervisor
-		server     suture.Service
-		token      *suture.ServiceToken
-		stop       func()
-	}
-)
-
 var SutureEventLabels = map[suture.EventType]string{
 	suture.EventTypeStopTimeout:      "timeout",
 	suture.EventTypeServicePanic:     "panic",
