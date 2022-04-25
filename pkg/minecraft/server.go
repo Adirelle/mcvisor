@@ -43,6 +43,7 @@ const (
 	RestartTarget  Target = "restart"
 	ShutdownTarget Target = "shutdown"
 
+	StatusCommand   commands.Name = "status"
 	StartCommand    commands.Name = "start"
 	StopCommand     commands.Name = "stop"
 	RestartCommand  commands.Name = "restart"
@@ -128,6 +129,11 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 		case cmd := <-s.commands:
 			if newTarget, found := commandTargets[cmd.Name]; found {
 				s.targets <- newTarget
+				close(cmd.Response)
+			}
+			if cmd.Name == StatusCommand {
+				cmd.Response <- fmt.Sprintf("Server %s", s.status)
+				close(cmd.Response)
 			}
 		case <-processDone:
 			if s.process.Err != nil {
