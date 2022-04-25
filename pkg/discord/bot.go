@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/apex/log"
 	"github.com/bwmarrin/discordgo"
@@ -44,8 +43,6 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 		return fmt.Errorf("could not connect to Discord: %w", err)
 	}
 	defer b.disconnect()
-
-	defer b.dispatcher.Subscribe(b.commands).Cancel()
 
 	if len(b.Notifications) > 0 {
 		defer b.dispatcher.Subscribe(b.notifications).Cancel()

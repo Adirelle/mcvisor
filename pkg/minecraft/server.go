@@ -64,9 +64,6 @@ var (
 	_ discord.Notification   = StartTarget
 )
 
-func init() {
-}
-
 func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
 	s := &Server{
 		Config:     conf,
