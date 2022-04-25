@@ -3,7 +3,6 @@ package minecraft
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
@@ -57,9 +56,11 @@ const (
 
 var (
 	// Interface check
-	_ suture.Service   = (*Server)(nil)
-	_ Statuser         = (*Server)(nil)
-	_ commands.Handler = (*targetSetter)(nil)
+	_ suture.Service         = (*Server)(nil)
+	_ Statuser               = (*Server)(nil)
+	_ commands.Handler       = (*targetSetter)(nil)
+	_ discord.Notification   = Started
+	_ discord.Notification   = StartTarget
 )
 
 func init() {
@@ -169,16 +170,18 @@ func (s *Server) handleStatusCommand(cmd *commands.Command) (string, error) {
 	return fmt.Sprintf("Server %s", s.status), nil
 }
 
-func (t Target) Notify(writer io.Writer) {
+func (t Target) DiscordNotification() string {
 	switch t {
 	case RestartTarget:
-		_, _ = io.WriteString(writer, "**Restarting the server**")
+		return "**Restarting the server**"
 	case StartTarget:
-		_, _ = io.WriteString(writer, "**Starting the server**")
+		return "**Starting the server**"
 	case StopTarget:
-		_, _ = io.WriteString(writer, "**Stopping the server**")
+		return "**Stopping the server**"
 	case ShutdownTarget:
-		_, _ = io.WriteString(writer, "**Shutting down**")
+		return "**Shutting down**"
+	default:
+		return ""
 	}
 }
 
@@ -203,10 +206,11 @@ func (s Status) IsRunning() bool {
 	return s == Started || s == Ready || s == Unreachable
 }
 
-func (s Status) Notify(writer io.Writer) {
+func (s Status) DiscordNotification() string {
 	switch s {
 	case Ready, Unreachable, Stopped:
-		_, _ = fmt.Fprintf(writer, "**Server %s**", string(s))
+		return fmt.Sprintf("**Server %s**", string(s))
 	default:
+		return ""
 	}
 }

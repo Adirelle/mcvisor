@@ -1,28 +1,24 @@
 package discord
 
 import (
-	"io"
-	"strings"
-
 	"github.com/apex/log"
 )
 
 type (
-	Notifier interface {
-		Notify(io.Writer)
+	Notification interface {
+		DiscordNotification() string
 	}
 )
 
-func (b *Bot) HandleNotifier(notifier Notifier) {
-	logger := log.WithField("notifier", notifier)
-	builder := strings.Builder{}
-	notifier.Notify(&builder)
-	message := builder.String()
-	logger = logger.WithField("message", message)
-	logger.Debug("discord.notification")
+func (b *Bot) HandleNotification(notification Notification) {
+	message := notification.DiscordNotification()
 	if len(message) == 0 {
 		return
 	}
+
+	logger := log.WithField("notification", notification).WithField("message", message)
+	logger.Debug("discord.notification")
+
 	for _, channelID := range b.Notifications {
 		loggerC := logger.WithField("channel", channelID)
 		if _, err := b.Session.ChannelMessageSend(string(channelID), message); err == nil {

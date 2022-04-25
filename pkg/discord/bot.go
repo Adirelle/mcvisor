@@ -24,11 +24,11 @@ type (
 
 func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
 	return &Bot{
-		Config:     config,
-		dispatcher: dispatcher,
-		messages:   events.MakeHandler[*discordgo.Message](),
-		notifiers:  events.MakeHandler[Notifier](),
-		ready:      make(chan struct{}),
+		Config:        config,
+		dispatcher:    dispatcher,
+		messages:      events.MakeHandler[*discordgo.Message](),
+		notifications: events.MakeHandler[Notification](),
+		ready:         make(chan struct{}),
 	}
 }
 
@@ -47,15 +47,15 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 	defer b.dispatcher.Subscribe(b.commands).Cancel()
 
 	if len(b.Notifications) > 0 {
-		defer b.dispatcher.Subscribe(b.notifiers).Cancel()
+		defer b.dispatcher.Subscribe(b.notifications).Cancel()
 	}
 
 	for {
 		select {
 		case msg := <-b.messages:
 			b.HandleMessage(msg, ctx)
-		case notifier := <-b.notifiers:
-			b.HandleNotifier(notifier)
+		case notification := <-b.notifications:
+			b.HandleNotification(notification)
 		case <-ctx.Done():
 			return nil
 		}
