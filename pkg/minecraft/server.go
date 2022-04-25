@@ -60,6 +60,7 @@ var (
 	_ Statuser               = (*Server)(nil)
 	_ commands.Handler       = (*targetSetter)(nil)
 	_ discord.Notification   = Started
+	_ discord.StatusProvider = Started
 	_ discord.Notification   = StartTarget
 )
 
@@ -213,4 +214,8 @@ func (s Status) DiscordNotification() string {
 	default:
 		return ""
 	}
+}
+
+func (s Status) DiscordStatus() string {
+	return fmt.Sprintf("Server %s", string(s))
 }

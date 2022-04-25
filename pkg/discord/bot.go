@@ -14,11 +14,11 @@ type (
 	Bot struct {
 		Config
 		*discordgo.Session
-		dispatcher *events.Dispatcher
-		ready      chan struct{}
-		commands   chan *commands.Command
-		messages   chan *discordgo.Message
-		notifiers  chan Notifier
+		dispatcher    *events.Dispatcher
+		ready         chan struct{}
+		messages      chan *discordgo.Message
+		notifications chan Notification
+		statuses      chan StatusProvider
 	}
 )
 
@@ -28,6 +28,7 @@ func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
 		dispatcher:    dispatcher,
 		messages:      events.MakeHandler[*discordgo.Message](),
 		notifications: events.MakeHandler[Notification](),
+		statuses:      events.MakeHandler[StatusProvider](),
 		ready:         make(chan struct{}),
 	}
 }
@@ -49,6 +50,7 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 	if len(b.Notifications) > 0 {
 		defer b.dispatcher.Subscribe(b.notifications).Cancel()
 	}
+	defer b.dispatcher.Subscribe(b.statuses).Cancel()
 
 	for {
 		select {
@@ -56,6 +58,8 @@ func (b *Bot) Serve(ctx context.Context) (err error) {
 			b.HandleMessage(msg, ctx)
 		case notification := <-b.notifications:
 			b.HandleNotification(notification)
+		case provider := <-b.statuses:
+			b.HandleStatusProvider(provider)
 		case <-ctx.Done():
 			return nil
 		}
