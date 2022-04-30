@@ -20,6 +20,7 @@ type (
 		messages      chan *discordgo.Message
 		notifications chan Notification
 		statuses      chan StatusProvider
+		avatar        string
 	}
 )
 
@@ -106,19 +107,32 @@ func (b *Bot) connect(ctx context.Context) (err error) {
 		if err == nil {
 			err = b.checkChannels(ready)
 		}
-		log.WithField("username", ready.User.Username).WithField("avatar", ready.User.Avatar).Info("discord.ready")
 		if err == nil {
-			user, updateErr := b.Session.UserUpdate(
-				ready.User.Username,
-				fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(assets.Logo)),
-			)
-			log.WithError(updateErr).WithField("user", user).Debug("discord.user.update")
+			b.updateAvatar(ready.User.Avatar)
 		}
+		log.WithField("username", ready.User.Username).Info("discord.ready")
 	case <-ctx.Done():
 	}
 	close(b.ready)
 
 	return
+}
+
+func (b *Bot) updateAvatar(avatar string) {
+	if b.avatar == avatar {
+		return
+	}
+	user, err := b.Session.UserUpdate(
+		"",
+		fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(assets.Logo)),
+	)
+	if err == nil {
+		b.avatar = user.Avatar
+	}
+	log.WithError(err).
+		WithField("username", user.Username).
+		WithField("avatar", user.Avatar).
+		Debug("discord.user.update")
 }
 
 func (b *Bot) checkGuildMembership(ready *discordgo.Ready) error {
