@@ -201,7 +201,6 @@ func (s *Server) executeConsoleCommand(command string, reply chan<- string) {
 			reply <- "`" + string(output) + "`"
 			return
 		} else if err == context.DeadlineExceeded {
-			err = nil
 			return
 		}
 	}
