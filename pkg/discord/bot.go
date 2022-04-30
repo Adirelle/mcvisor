@@ -2,10 +2,10 @@ package discord
 
 import (
 	"context"
-	_ "embed"
 	"encoding/base64"
 	"fmt"
 
+	"github.com/Adirelle/mcvisor/assets"
 	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/apex/log"
 	"github.com/bwmarrin/discordgo"
@@ -22,9 +22,6 @@ type (
 		statuses      chan StatusProvider
 	}
 )
-
-//go:embed logo.png
-var avatarBinary []byte
 
 func NewBot(config Config, dispatcher *events.Dispatcher) *Bot {
 	return &Bot{
@@ -113,7 +110,7 @@ func (b *Bot) connect(ctx context.Context) (err error) {
 		if err == nil {
 			user, updateErr := b.Session.UserUpdate(
 				ready.User.Username,
-				fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(avatarBinary)),
+				fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(assets.Logo)),
 			)
 			log.WithError(updateErr).WithField("user", user).Debug("discord.user.update")
 		}
