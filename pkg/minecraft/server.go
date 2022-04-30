@@ -200,6 +200,9 @@ func (s *Server) executeConsoleCommand(command string, reply chan<- string) {
 		if output, err = utils.RecvWithTimeout(s.outputs, time.Second); err == nil {
 			reply <- "`" + string(output) + "`"
 			return
+		} else if err == context.DeadlineExceeded {
+			err = nil
+			return
 		}
 	}
 	log.WithError(err).WithField("command", command).Warn("server.console")
