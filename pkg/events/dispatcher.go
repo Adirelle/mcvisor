@@ -23,7 +23,6 @@ type (
 		dispatcher *Dispatcher
 		handler    reflect.Value
 		eventType  reflect.Type
-		cancel     func()
 	}
 )
 

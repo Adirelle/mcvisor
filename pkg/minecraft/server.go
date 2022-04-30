@@ -26,7 +26,6 @@ type (
 		target     Target
 		process    *process
 		targets    chan Target
-		commands   chan *commands.Command
 		pings      chan PingerEvent
 		console    chan *consoleCommand
 		outputs    chan ServerOutput
