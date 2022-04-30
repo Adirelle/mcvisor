@@ -2,11 +2,17 @@ package minecraft
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
+	"time"
 
 	"github.com/Adirelle/mcvisor/pkg/commands"
 	"github.com/Adirelle/mcvisor/pkg/discord"
 	"github.com/Adirelle/mcvisor/pkg/events"
+	"github.com/Adirelle/mcvisor/pkg/utils"
+	"github.com/apex/log"
 	"github.com/thejerf/suture/v4"
 	"golang.org/x/exp/slices"
 )
@@ -22,6 +28,8 @@ type (
 		targets    chan Target
 		commands   chan *commands.Command
 		pings      chan PingerEvent
+		console    chan *consoleCommand
+		outputs    chan ServerOutput
 	}
 
 	Status string
@@ -31,6 +39,11 @@ type (
 	targetSetter struct {
 		target Target
 		server *Server
+	}
+
+	consoleCommand struct {
+		command string
+		reply   chan<- string
 	}
 )
 
@@ -52,6 +65,7 @@ const (
 	StopCommand     commands.Name = "stop"
 	RestartCommand  commands.Name = "restart"
 	ShutdownCommand commands.Name = "shutdown"
+	ConsoleCommand  commands.Name = "console"
 )
 
 var (
@@ -62,6 +76,10 @@ var (
 	_ discord.Notification   = Started
 	_ discord.StatusProvider = Started
 	_ discord.Notification   = StartTarget
+
+	ConsoleCommandTimeout = 5 * time.Second
+
+	ErrStoppedServer = errors.New("server is stopped")
 )
 
 func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
@@ -71,6 +89,8 @@ func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
 		status:     Stopped,
 		targets:    events.MakeHandler[Target](),
 		pings:      events.MakeHandler[PingerEvent](),
+		console:    events.MakeHandler[*consoleCommand](),
+		outputs:    events.MakeHandler[ServerOutput](),
 		dispatcher: dispatcher,
 	}
 	commands.Register(StartCommand, "start the server", discord.ControlCategory, &targetSetter{StartTarget, s})
@@ -78,12 +98,14 @@ func NewServer(conf *Config, dispatcher *events.Dispatcher) *Server {
 	commands.Register(RestartCommand, "restart the server", discord.ControlCategory, &targetSetter{RestartTarget, s})
 	commands.Register(ShutdownCommand, "stop the server *and* mcvisor", discord.AdminCategory, &targetSetter{ShutdownTarget, s})
 	commands.Register(StatusCommand, "show serve status", discord.QueryCategory, commands.HandlerFunc(s.handleStatusCommand))
+	commands.Register(ConsoleCommand, "send a console command to the server", discord.ControlCategory, commands.HandlerFunc(s.handleConsoleCommand))
 	return s
 }
 
 func (s *Server) Serve(ctx context.Context) (err error) {
 	defer s.dispatcher.Subscribe(s.targets).Cancel()
 	defer s.dispatcher.Subscribe(s.pings).Cancel()
+	defer s.dispatcher.Subscribe(s.outputs).Cancel()
 
 	var processDone chan struct{}
 
@@ -94,7 +116,7 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 		case s.target.MustStart() && !s.status.IsOneOf(Starting, Started, Ready, Unreachable):
 			s.setStatus(Starting)
 			if s.process == nil {
-				s.process, err = newProcess(s.Config)
+				s.process, err = newProcess(s.Config, s.dispatcher)
 				if err != nil {
 					return err
 				}
@@ -116,20 +138,25 @@ func (s *Server) Serve(ctx context.Context) (err error) {
 		}
 
 		select {
-		case newTarget := <-s.targets:
-			s.setTarget(newTarget)
+		case <-processDone:
+			if s.process.Err != nil {
+				log.WithError(s.process.Err).Info("server.exited")
+			}
+			processDone = nil
+			s.process = nil
+			s.setStatus(Stopped)
 		case ping := <-s.pings:
 			if ping.IsSuccess() && s.status.IsOneOf(Started, Unreachable) {
 				s.setStatus(Ready)
 			} else if !ping.IsSuccess() && s.status == Ready {
 				s.setStatus(Unreachable)
 			}
-		case <-processDone:
-			if s.process.Err != nil {
-			}
-			processDone = nil
-			s.process = nil
-			s.setStatus(Stopped)
+		case newTarget := <-s.targets:
+			s.setTarget(newTarget)
+		case cmd := <-s.console:
+			s.executeConsoleCommand(cmd.command, cmd.reply)
+		case output := <-s.outputs:
+			log.WithField("output", output).Debug("server.stdout")
 		case <-ctx.Done():
 			s.Shutdown()
 		}
@@ -164,8 +191,46 @@ func (s *Server) setTarget(target Target) {
 	s.dispatcher.Dispatch(target)
 }
 
+func (s *Server) executeConsoleCommand(command string, reply chan<- string) {
+	defer close(reply)
+	_, err := io.WriteString(s.process.Stdin, command+"\n")
+	if err == nil {
+		log.WithField("command", command).Info("server.console")
+		var output ServerOutput
+		if output, err = utils.RecvWithTimeout(s.outputs, time.Second); err == nil {
+			reply <- "`" + string(output) + "`"
+			return
+		}
+	}
+	log.WithError(err).WithField("command", command).Warn("server.console")
+	reply <- err.Error()
+}
+
 func (s *Server) handleStatusCommand(cmd *commands.Command) (string, error) {
 	return fmt.Sprintf("Server %s", s.status), nil
+}
+
+func (s *Server) handleConsoleCommand(cmd *commands.Command) (reply string, err error) {
+	if !s.status.IsRunning() {
+		err = ErrStoppedServer
+		return
+	}
+
+	ctx, cleanup := context.WithTimeout(context.Background(), ConsoleCommandTimeout)
+	defer cleanup()
+	replyC := make(chan string)
+
+	cmdStruct := &consoleCommand{
+		command: strings.Join(cmd.Arguments, " "),
+		reply:   replyC,
+	}
+	if err = utils.SendWithContext(s.console, cmdStruct, ctx); err != nil {
+		return
+	}
+
+	reply, err = utils.RecvWithContext(replyC, ctx)
+
+	return
 }
 
 func (t Target) DiscordNotification() string {

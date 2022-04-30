@@ -31,7 +31,7 @@ that can notify a channel of event and accepts commands.
   - [x] `!start`, `!stop`, `!restart` and `!shutdown` command to control the server
   - [x] `!online` command to list the players that are connected to the server
   - [x] `!status` command to show the server status
-  - [ ] `!console` command to send commands to the server console
+  - [x] `!console` command to send commands to the server console
   - [ ] Scheduled restarts/scripts
   - [ ] Restart on unreachable status (maybe)
   - [ ] Disableable

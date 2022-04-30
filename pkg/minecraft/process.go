@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/Adirelle/mcvisor/pkg/events"
 	"github.com/apex/log"
 )
 
@@ -19,19 +20,23 @@ type (
 		Err   error
 		Stdin io.Writer
 		Stop  func()
+		*events.Dispatcher
 	}
+
+	ServerOutput string
 )
 
 //go:embed log4j.xml
 var log4jFile []byte
 
-func newProcess(c *Config) (p *process, err error) {
+func newProcess(c *Config, d *events.Dispatcher) (p *process, err error) {
 	if err = os.WriteFile(c.Server.AbsLog4JConf(), log4jFile, os.FileMode(0o644)); err != nil {
 		return
 	}
 
 	p = &process{
-		Done: make(chan struct{}),
+		Done:       make(chan struct{}),
+		Dispatcher: d,
 	}
 
 	cmdLine := c.Command()
@@ -42,14 +47,18 @@ func newProcess(c *Config) (p *process, err error) {
 	p.Cmd.Dir = c.WorkingDir()
 	p.Cmd.Env = c.Env()
 
+	if p.Stdin, err = p.Cmd.StdinPipe(); err != nil {
+		return
+	}
+
 	if stdout, err := p.Cmd.StdoutPipe(); err == nil {
-		go readLines(stdout, ParseStdout)
+		go readLines(stdout, p.DispatchStdout)
 	} else {
 		return nil, err
 	}
 
 	if stderr, err := p.Cmd.StderrPipe(); err == nil {
-		go readLines(stderr, LogStderr)
+		go readLines(stderr, p.LogStderr)
 	} else {
 		return nil, err
 	}
@@ -81,10 +90,10 @@ func readLines(rd io.Reader, f func(string)) {
 	}
 }
 
-func ParseStdout(data string) {
-	log.WithField("output", data).Info("server.stdout")
+func (p *process) DispatchStdout(line string) {
+	p.Dispatch(ServerOutput(line))
 }
 
-func LogStderr(data string) {
-	log.WithField("output", data).Error("server.stderr")
+func (p *process) LogStderr(line string) {
+	log.WithField("output", line).Warn("server.stderr")
 }
